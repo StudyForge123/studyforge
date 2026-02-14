@@ -3,5 +3,7 @@ ssh_cidr             = "0.0.0.0/0"
 instance_type        = "t3.small"
 key_pair_name        = ""
 
-openai_secret_name = "studybuddy/openai"
-mongo_secret_name  = "studybuddy/mongodb"
+openai_secret_name    = "studybuddy/openai"
+mongo_secret_name     = "studybuddy/mongodb"
+domain_name           = "studyforge.us"
+custom_domain_enabled = true

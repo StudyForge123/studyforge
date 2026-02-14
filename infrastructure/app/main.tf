@@ -23,6 +23,20 @@ data "aws_subnets" "default_vpc_subnets" {
   }
 }
 
+# Look up the certificate created by the DNS stack
+data "aws_acm_certificate" "site" {
+  count       = var.custom_domain_enabled && var.domain_name != "" ? 1 : 0
+  domain      = var.domain_name
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
+locals {
+  # Use the certificate_arn from variable if provided (override), 
+  # otherwise try to get it from the data source lookup if enabled.
+  certificate_arn = var.certificate_arn != "" ? var.certificate_arn : try(data.aws_acm_certificate.site[0].arn, "")
+}
+
 ############################
 # Frontend - S3 Static Website
 ############################
@@ -35,7 +49,7 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
   index_document { suffix = "index.html" }
-  error_document { key    = "index.html" }
+  error_document { key = "index.html" }
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -60,6 +74,73 @@ resource "aws_s3_bucket_policy" "frontend_public_read" {
   })
 
   depends_on = [aws_s3_bucket_public_access_block.frontend]
+}
+
+############################
+# CloudFront Distribution
+############################
+
+resource "aws_cloudfront_distribution" "site" {
+  origin {
+    domain_name = aws_s3_bucket_website_configuration.frontend.website_endpoint
+    origin_id   = "S3-${aws_s3_bucket.frontend.id}"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+
+  # If you want to use the custom domain here, you must add 'aliases'
+  # BUT ONLY if the ACM cert is also here or passed in.
+  aliases = var.custom_domain_enabled && var.domain_name != "" ? [var.domain_name, "www.${var.domain_name}"] : []
+
+  # The user's DNS stack creates the cert.
+  # Circular dependency risk: DNS/ACM needs domain -> App needs Cert.
+  # Usually:
+  # 1. App creates CloudFront with default cert.
+  # 2. DNS creates ACM + Validates.
+  # 3. App updates CloudFront with Alias + ACM Cert.
+  #
+  # However, the user's `dns` stack reads `app` outputs for CloudFront domain.
+  # Use default viewer cert for now to get the distribution domain.
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3-${aws_s3_bucket.frontend.id}"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = local.certificate_arn == "" ? true : false
+    acm_certificate_arn            = local.certificate_arn != "" ? local.certificate_arn : null
+    ssl_support_method             = local.certificate_arn != "" ? "sni-only" : null
+    minimum_protocol_version       = local.certificate_arn != "" ? "TLSv1.2_2021" : null
+  }
 }
 
 ############################
@@ -172,12 +253,12 @@ locals {
 }
 
 resource "aws_instance" "api" {
-  ami                         = data.aws_ami.al2023.id
-  instance_type               = var.instance_type
-  subnet_id                   = data.aws_subnets.default_vpc_subnets.ids[0]
-  vpc_security_group_ids      = [aws_security_group.api_sg.id]
-  key_name                    = local.use_key ? var.key_pair_name : null
-  iam_instance_profile        = aws_iam_instance_profile.api_profile.name
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = var.instance_type
+  subnet_id              = data.aws_subnets.default_vpc_subnets.ids[0]
+  vpc_security_group_ids = [aws_security_group.api_sg.id]
+  key_name               = local.use_key ? var.key_pair_name : null
+  iam_instance_profile   = aws_iam_instance_profile.api_profile.name
 
   user_data = <<-EOF
     #!/bin/bash

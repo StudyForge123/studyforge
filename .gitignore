@@ -6,3 +6,9 @@ infrastructure/app/.terraform.lock.hcl
 infrastructure/app/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/LICENSE.txt
 infrastructure/app/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/terraform-provider-aws_v5.100.0_x5
 frontend/package-lock.json
+infrastructure/dns/.terraform.lock.hcl
+infrastructure/dns/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/LICENSE.txt
+infrastructure/dns/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/terraform-provider-aws_v5.100.0_x5
+infrastructure/ecr/.terraform.lock.hcl
+infrastructure/ecr/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/LICENSE.txt
+infrastructure/ecr/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/terraform-provider-aws_v5.100.0_x5

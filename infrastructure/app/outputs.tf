@@ -21,3 +21,11 @@ output "openai_secret_arn" {
 output "mongo_secret_arn" {
   value = aws_secretsmanager_secret.mongo.arn
 }
+
+output "cloudfront_domain_name" {
+  value = aws_cloudfront_distribution.site.domain_name
+}
+
+output "cloudfront_hosted_zone_id" {
+  value = aws_cloudfront_distribution.site.hosted_zone_id
+}
