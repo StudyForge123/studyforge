@@ -1,7 +1,7 @@
 import { Amplify } from "aws-amplify";
 
 export function configureAmplify() {
-  Amplify.configure({
+  const config = {
     Auth: {
       Cognito: {
         region: import.meta.env.VITE_AWS_REGION,
@@ -15,5 +15,13 @@ export function configureAmplify() {
         },
       },
     },
+  };
+
+  console.log("Configuring Amplify with:", {
+    region: config.Auth.Cognito.region,
+    userPoolId: config.Auth.Cognito.userPoolId,
+    clientId: config.Auth.Cognito.userPoolClientId,
   });
+
+  Amplify.configure(config);
 }
