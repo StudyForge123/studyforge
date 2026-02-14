@@ -1,0 +1,12 @@
+{
+  "name": "studyhub-database",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "mongoose": "^8.23.0"
+  }
+}
