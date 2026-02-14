@@ -1,0 +1,5 @@
+region              = "us-east-1"
+project             = "studybuddy"
+admin_principal_arn = "arn:aws:iam::732772501381:root"
+state_bucket_name   = "studybuddy-tfstate-unique"
+lock_table_name     = "studybuddy-tf-locks"
