@@ -1,8 +1,21 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
+import { fetchAuthSession } from "aws-amplify/auth";
+
 async function request(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+
+  try {
+    const session = await fetchAuthSession();
+    if (session.tokens?.accessToken) {
+      headers["Authorization"] = `Bearer ${session.tokens.accessToken.toString()}`;
+    }
+  } catch (error) {
+    console.debug("No auth session found", error);
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers,
     ...options,
   });
 
