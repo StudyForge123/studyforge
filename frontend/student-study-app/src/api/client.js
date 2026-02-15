@@ -26,19 +26,34 @@ export const api = {
   // CLASS MANAGEMENT
   listClasses: () => request("/api/classes"),
 
+  // Alias for components that use getClasses
+  getClasses: async () => {
+    const data = await request("/api/classes");
+    return data.classes || [];
+  },
+
   createClass: (name) => request("/api/classes", {
     method: "POST",
-    body: JSON.stringify({ name }) // Backend expects { "name": "..." }
+    body: JSON.stringify({ name })
   }),
 
-  // FILE UPLOAD (Direct to Backend)
-  uploadSyllabus: (classId, fileObj) => {
+  // FILE MANAGEMENT
+  uploadFile: (classId, fileObj, fileType = "material") => {
     const formData = new FormData();
     formData.append("file", fileObj);
-    return request(`/api/classes/${classId}/upload/syllabus`, {
+    return request(`/api/classes/${classId}/upload?file_type=${fileType}`, {
       method: "POST",
       body: formData
     });
+  },
+
+  // Legacy support or alias
+  uploadSyllabus: (classId, fileObj) => api.uploadFile(classId, fileObj, "syllabus"),
+
+  // List files for a class
+  listFiles: (classId, fileType = null) => {
+    const params = fileType ? `?file_type=${fileType}` : "";
+    return request(`/api/classes/${classId}/files${params}`);
   },
 
   // CALENDAR
@@ -58,12 +73,35 @@ export const api = {
       body: JSON.stringify({ class_ids: classIds, default_year: defaultYear })
     }),
 
+  // QUIZ
+  generateQuiz: (params) => request("/api/quiz/generate", {
+    method: "POST",
+    body: JSON.stringify({
+      class_id: params.class_id,
+      num_questions: params.num_questions || 5,
+      difficulty: params.difficulty || "medium",
+      topic: params.topic || null,
+      instructions: params.instructions || null
+    })
+  }),
+
+  // STUDY SESSION
+  startStudySession: (params) => request("/api/study/session", {
+    method: "POST",
+    body: JSON.stringify(params)
+  }),
+
   // DASHBOARD
   getDashboard: () => request("/api/dashboard"),
 
   // CHAT
-  chat: (params) => request("/api/chat", {
+  sendChatMessage: (params) => request("/api/chat/send", {
     method: "POST",
     body: JSON.stringify(params)
   }),
+
+  getChatHistory: (classId) => request(`/api/chat/history?class_id=${classId}`),
+
+  // Legacy alias
+  chat: (params) => api.sendChatMessage(params),
 };

@@ -6,11 +6,16 @@ import Dashboard from "./components/Dashboard";
 import Calendar from "./components/Calendar";
 import AllClasses from "./components/AllClasses";
 import Settings from "./components/Settings";
+import StudyQuiz from "./components/StudyQuiz";
+import ClassChat from "./components/ClassChat";
 
-const navItems = ["Dashboard", "Calendar", "All Classes", "Settings"];
+const navItems = ["Dashboard", "Calendar", "All Classes", "Study & Quiz", "Class Chat", "Settings"];
 
 export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
+
+  // Selection state
+  const [selectedClassId, setSelectedClassId] = useState("");
 
   // Dashboard Data State
   const [dashboard, setDashboard] = useState(null);
@@ -18,8 +23,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
+  // Agent Results
+  const [quiz, setQuiz] = useState(null);
+  const [studySession, setStudySession] = useState(null);
+
   // Bottom chat State
-  const [mode, setMode] = useState("Study Session");
+  const [chatHistory, setChatHistory] = useState([]);
+  const [mode, setMode] = useState("Chat");
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
 
@@ -73,14 +83,35 @@ export default function App() {
 
   async function handleSend() {
     const text = message.trim();
-    if (!text) return;
+    if (!text || !selectedClassId) {
+      if (!selectedClassId) setErr("Please select a class first.");
+      return;
+    }
     setChatBusy(true);
     setErr("");
     try {
-      await api.chat({ mode, message: text });
-      setMessage("");
+      if (mode === "Chat") {
+        await api.sendChatMessage({ class_id: selectedClassId, message: text });
+        const history = await api.getChatHistory(selectedClassId);
+        setChatHistory(history.history || []);
+        setMessage("");
+        setActiveNav("Class Chat");
+      } else if (mode === "Practice Quiz") {
+        const res = await api.generateQuiz({ class_id: selectedClassId, topic: text });
+        console.log("Quiz response:", res);
+        setQuiz(res);
+        setMessage("");
+        setActiveNav("Study & Quiz");
+      } else if (mode === "Study Session") {
+        const res = await api.startStudySession({ class_id: selectedClassId, topic: text });
+        console.log("Study response:", res);
+        setStudySession(res);
+        setMessage("");
+        setActiveNav("Study & Quiz");
+      }
     } catch (e) {
-      setErr(e.message || "Chat failed");
+      console.error("Send error:", e);
+      setErr(e.message || "Operation failed");
     } finally {
       setChatBusy(false);
     }
@@ -101,14 +132,15 @@ export default function App() {
 
     setErr("");
     try {
-      await api.uploadSyllabus(uploadClassId, file);
-      // Optional: Show success message or refresh
-      alert("Syllabus uploaded successfully!");
+      // Defaulting to "material" unless we add a UI picker for type
+      // For now let's assume if it's from the Syllabus button it's syllabus, else material
+      const type = prompt("File type? (syllabus/material/assessment)", "material") || "material";
+      await api.uploadFile(uploadClassId, file, type);
+      alert(`${type} uploaded and indexed successfully!`);
       await refresh();
     } catch (e) {
       setErr(e.message || "Upload failed");
     } finally {
-      // Reset
       setUploadClassId(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -133,12 +165,31 @@ export default function App() {
         return <Calendar />;
       case "All Classes":
         return <AllClasses />;
+      case "Study & Quiz":
+        return (
+          <StudyQuiz
+            quiz={quiz}
+            studySession={studySession}
+            selectedClassId={selectedClassId}
+            classes={classes}
+          />
+        );
+      case "Class Chat":
+        return (
+          <ClassChat
+            chatHistory={chatHistory}
+            selectedClassId={selectedClassId}
+            classes={classes}
+            chatBusy={chatBusy}
+          />
+        );
       case "Settings":
         return <Settings />;
       default:
         return <div>Page not found</div>;
     }
   }
+
 
   return (
     <div className="h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
@@ -208,14 +259,35 @@ export default function App() {
           <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-center pointer-events-none">
             <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
               <select
+                value={selectedClassId}
+                onChange={async (e) => {
+                  const id = e.target.value;
+                  setSelectedClassId(id);
+                  if (id) {
+                    const hist = await api.getChatHistory(id);
+                    setChatHistory(hist.history || []);
+                  }
+                }}
+                className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                style={{ backgroundImage: 'none' }}
+              >
+                <option value="">Select Class...</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+
+              <div className="h-6 w-px bg-slate-100 mx-1" />
+
+              <select
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
                 className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
                 style={{ backgroundImage: 'none' }}
               >
+                <option>Chat</option>
                 <option>Study Session</option>
                 <option>Practice Quiz</option>
-                <option>Practice Exam</option>
               </select>
 
               <div className="h-6 w-px bg-slate-100 mx-1" />
@@ -224,7 +296,7 @@ export default function App() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="flex-1 bg-transparent px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none text-slate-800"
-                placeholder="Ask your AI assistant..."
+                placeholder={mode === "Chat" ? "Ask your AI assistant..." : `Enter topic for ${mode}...`}
               />
 
               <button
