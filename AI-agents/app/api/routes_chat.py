@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.storage.mongo import (
+from app.storage import (
     get_class,
     insert_chat_message,
     get_chat_history,

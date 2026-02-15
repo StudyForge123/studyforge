@@ -7,7 +7,7 @@ from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
-from app.storage.mongo import (
+from app.storage import (
     init_mongo,
     create_class,
     list_classes,

@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
-from app.storage.mongo import get_class, insert_file, list_files
+from app.storage import get_class, insert_file, list_files
 from app.storage.vector_store import VectorStore
 from app.storage.embeddings import generate_embeddings
 from app.ingest.pdf_text import extract_pdf_text_with_markers

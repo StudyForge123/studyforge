@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from app.storage.mongo import get_class
+from app.storage import get_class
 from app.storage.vector_store import VectorStore
 from app.storage.embeddings import generate_embedding
 from app.agents.study_agent import generate_study_session
