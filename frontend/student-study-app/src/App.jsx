@@ -41,8 +41,13 @@ export default function App() {
   const [chatBusy, setChatBusy] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  const [mobileComposerHeight, setMobileComposerHeight] = useState(84);
   const recognitionRef = useRef(null);
   const promptRef = useRef(null);
+  const composerRef = useRef(null);
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
@@ -94,6 +99,8 @@ export default function App() {
 
   const isClassChatTab = activeNav === "Class Chat";
   const filteredClassFiles = classFiles.filter((f) => !f.class_id || f.class_id === selectedClassId);
+  const composerVisibleTabs = new Set(["Class Chat", "Study & Quiz"]);
+  const shouldShowComposer = composerVisibleTabs.has(activeNav);
 
   useEffect(() => {
     if (isClassChatTab && mode !== "Chat") {
@@ -106,6 +113,41 @@ export default function App() {
       setTimeout(() => promptRef.current?.focus(), 0);
     }
   }, [isClassChatTab, isComposerCollapsed]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const onViewportChange = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(mediaQuery.matches);
+    mediaQuery.addEventListener("change", onViewportChange);
+    return () => mediaQuery.removeEventListener("change", onViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || !shouldShowComposer || !composerRef.current) return undefined;
+
+    const updateComposerHeight = () => {
+      if (!composerRef.current) return;
+      const nextHeight = Math.ceil(composerRef.current.getBoundingClientRect().height);
+      setMobileComposerHeight(nextHeight || 84);
+    };
+
+    updateComposerHeight();
+    const observer = new ResizeObserver(updateComposerHeight);
+    observer.observe(composerRef.current);
+    return () => observer.disconnect();
+  }, [isMobileViewport, shouldShowComposer, isComposerCollapsed, message, selectedClassId, selectedFileId, mode, chatBusy, isListening, voiceEnabled]);
+
+  function handlePromptInput(e) {
+    setMessage(e.target.value);
+
+    if (!isMobileViewport) return;
+
+    // Keep the mobile input compact while still allowing short multiline typing.
+    e.target.style.height = "auto";
+    const nextHeight = Math.min(e.target.scrollHeight, 128);
+    e.target.style.height = `${nextHeight}px`;
+    e.target.style.overflowY = e.target.scrollHeight > 128 ? "auto" : "hidden";
+  }
 
   async function handleCreateClass() {
     setErr("");
@@ -308,9 +350,10 @@ export default function App() {
     }
   }
 
-  const composerVisibleTabs = new Set(["Class Chat", "Study & Quiz"]);
-  const shouldShowComposer = composerVisibleTabs.has(activeNav);
-  const shouldRenderComposer = shouldShowComposer && !isComposerCollapsed;
+  const shouldRenderComposer = shouldShowComposer && (!isComposerCollapsed || isMobileViewport);
+  const mobileContentPadding = shouldShowComposer
+    ? `${Math.max(mobileComposerHeight, isComposerCollapsed ? 72 : 84) + 12}px`
+    : undefined;
 
 
   return (
@@ -406,7 +449,10 @@ export default function App() {
           </div>
 
           {/* Scrollable Page Content */}
-          <div className={`flex-1 overflow-y-auto scroll-smooth ${shouldRenderComposer ? (isClassChatTab ? "pb-36 md:pb-32" : "pb-72 md:pb-44") : "pb-6"}`}>
+          <div
+            className={`flex-1 overflow-y-auto scroll-smooth pb-6 ${shouldRenderComposer ? (isClassChatTab ? "md:pb-32" : "md:pb-44") : "md:pb-6"}`}
+            style={isMobileViewport ? { paddingBottom: mobileContentPadding } : undefined}
+          >
             {renderContent()}
           </div>
 
@@ -426,16 +472,36 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsComposerCollapsed((v) => !v)}
-              className={`absolute ${isClassChatTab ? "bottom-24 md:bottom-20" : "bottom-3 md:bottom-8"} right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50`}
+              className={`hidden md:inline-flex absolute ${isClassChatTab ? "bottom-24 md:bottom-20" : "bottom-3 md:bottom-8"} right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50`}
             >
               {isComposerCollapsed ? "Open Prompt Box" : "Collapse Prompt Box"}
             </button>
           )}
 
-          {/* Bottom Prompt Bar (Floating) */}
+          {/* Mobile: fixed ChatGPT-like bottom bar. Desktop: existing floating composer. */}
           {shouldRenderComposer && (
-            <div className={`absolute ${isClassChatTab ? "bottom-0 md:bottom-0 left-0 right-0" : "bottom-16 md:bottom-20 left-3 md:left-8 right-3 md:right-8"} z-20 flex justify-center pointer-events-none`}>
-              <div className={`w-full ${isClassChatTab ? "max-w-none md:max-w-6xl rounded-none md:rounded-2xl border-x-0 md:border" : "max-w-5xl rounded-2xl border"} bg-white/90 backdrop-blur-xl shadow-2xl shadow-slate-200/50 border-white/20 p-3 space-y-2 pointer-events-auto ring-1 ring-slate-900/5`}>
+            <div className={`${isMobileViewport ? "fixed inset-x-0 bottom-0 z-30 px-0" : `absolute ${isClassChatTab ? "bottom-0 md:bottom-0 left-0 right-0" : "bottom-16 md:bottom-20 left-3 md:left-8 right-3 md:right-8"} z-20 flex justify-center pointer-events-none`}`}>
+              <div
+                ref={composerRef}
+                className={`w-full ${isMobileViewport
+                  ? "rounded-t-2xl border-t border-x border-slate-200 bg-white p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-10px_30px_rgba(15,23,42,0.12)]"
+                  : `${isClassChatTab ? "max-w-none md:max-w-6xl rounded-none md:rounded-2xl border-x-0 md:border" : "max-w-5xl rounded-2xl border"} bg-white/90 backdrop-blur-xl shadow-2xl shadow-slate-200/50 border-white/20 p-3 space-y-2 pointer-events-auto ring-1 ring-slate-900/5`
+                }`}
+              >
+              {isMobileViewport && (
+                <button
+                  type="button"
+                  onClick={() => setIsComposerCollapsed((v) => !v)}
+                  aria-expanded={!isComposerCollapsed}
+                  className="w-full flex items-center justify-center gap-2 py-1 text-slate-500"
+                >
+                  <span className="h-1.5 w-10 rounded-full bg-slate-300" />
+                  <span className="text-xs font-semibold">{isComposerCollapsed ? "▴" : "▾"}</span>
+                </button>
+              )}
+
+              {!isMobileViewport || !isComposerCollapsed ? (
+              <>
               <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedClassId}
@@ -496,14 +562,14 @@ export default function App() {
                 <textarea
                   ref={promptRef}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={handlePromptInput}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
                       handleSend();
                     }
                   }}
-                  rows={isClassChatTab ? 2 : 3}
+                  rows={isMobileViewport ? 1 : (isClassChatTab ? 2 : 3)}
                   className="w-full md:flex-1 resize-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-slate-800"
                   placeholder={`${mode === "Chat" ? "Ask your AI assistant..." : `Enter topic for ${mode}...`} (Ctrl/Cmd+Enter to send)`}
                 />
@@ -538,6 +604,10 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              </>
+              ) : (
+                <div className="px-2 pb-1 text-xs text-slate-500">Prompt collapsed</div>
+              )}
             </div>
             </div>
           )}
