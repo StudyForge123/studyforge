@@ -1,13 +1,4 @@
 from fastapi import FastAPI
-<<<<<<< HEAD
-<<<<<<< HEAD
-from app.api.routes_calendar import router as calendar_router
-
-app = FastAPI()
-app.include_router(calendar_router)
-=======
-=======
->>>>>>> main
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes_calendar import router as calendar_router
 from app.api.routes_dashboard import router as dashboard_router
@@ -30,10 +21,6 @@ app.include_router(dashboard_router)
 app.include_router(chat_router)
 app.include_router(quiz_router)
 app.include_router(study_router)
-<<<<<<< HEAD
->>>>>>> sulaiman
-=======
->>>>>>> main
 
 @app.get("/health")
 def health():

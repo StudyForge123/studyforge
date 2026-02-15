@@ -2,20 +2,34 @@
 set -euo pipefail
 
 # Deploy React/Vite build to the S3 bucket created by Terraform.
-# Also prints the EC2 API IP you should use for VITE_API_BASE_URL.
+# Default behavior is same-origin API routing through CloudFront (/api/*).
 
-# ---- CONFIG ----
+# ---- PATHS / CONFIG ----
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
 # Path to the Terraform app folder (where `terraform output` works)
-TF_DIR="${TF_DIR:-../infrastructure/app}"
+TF_DIR="${TF_DIR:-$REPO_ROOT/infrastructure/app}"
+
+# Frontend app directory (Vite project root)
+FRONTEND_DIR="${FRONTEND_DIR:-$SCRIPT_DIR/student-study-app}"
 
 # Frontend build output directory (Vite default)
-DIST_DIR="${DIST_DIR:-dist}"
+DIST_DIR="${DIST_DIR:-$FRONTEND_DIR/dist}"
 
 # Set to 1 if you want the script to write/update .env.production automatically
 WRITE_ENV_PROD="${WRITE_ENV_PROD:-0}"
 
-# If WRITE_ENV_PROD=1, this file will be written/overwritten
-ENV_PROD_FILE="${ENV_PROD_FILE:-.env.production}"
+# If WRITE_ENV_PROD=1, this file will be written/overwritten.
+# Must live in the Vite project root to be picked up by build.
+ENV_PROD_FILE="${ENV_PROD_FILE:-$FRONTEND_DIR/.env.production}"
+
+# Optional explicit API base URL. Leave empty to use same-origin /api/*.
+API_BASE_URL="${API_BASE_URL:-}"
+
+# Invalidate CloudFront after upload to avoid stale index/assets.
+INVALIDATE_CLOUDFRONT="${INVALIDATE_CLOUDFRONT:-1}"
+WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-0}"
 
 # ---- HELPERS ----
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -30,6 +44,7 @@ need aws
 need npm
 
 [ -d "$TF_DIR" ] || die "TF_DIR not found: $TF_DIR"
+[ -d "$FRONTEND_DIR" ] || die "FRONTEND_DIR not found: $FRONTEND_DIR"
 
 # ---- READ TERRAFORM OUTPUTS ----
 pushd "$TF_DIR" >/dev/null
@@ -40,6 +55,8 @@ pushd "$TF_DIR" >/dev/null
 S3_BUCKET="$(terraform output -raw frontend_bucket 2>/dev/null || true)"
 API_IP="$(terraform output -raw api_public_ip 2>/dev/null || true)"
 WEBSITE_URL="$(terraform output -raw frontend_website_url 2>/dev/null || true)"
+CLOUDFRONT_DIST_ID="$(terraform output -raw cloudfront_distribution_id 2>/dev/null || true)"
+CLOUDFRONT_DOMAIN="$(terraform output -raw cloudfront_domain_name 2>/dev/null || true)"
 
 popd >/dev/null
 
@@ -52,39 +69,89 @@ echo "  API public IP:  $API_IP"
 if [ -n "$WEBSITE_URL" ]; then
   echo "  Website URL:    $WEBSITE_URL"
 fi
+if [ -n "$CLOUDFRONT_DOMAIN" ]; then
+  echo "  CloudFront:     https://$CLOUDFRONT_DOMAIN"
+fi
 echo
 
 # ---- OPTIONALLY WRITE .env.production ----
 if [ "$WRITE_ENV_PROD" = "1" ]; then
-  echo "Writing $ENV_PROD_FILE with VITE_API_BASE_URL=http://$API_IP"
-  cat > "$ENV_PROD_FILE" <<EOF
-VITE_API_BASE_URL=http://$API_IP
+  if [ -n "$API_BASE_URL" ]; then
+    echo "Writing $ENV_PROD_FILE with explicit VITE_API_BASE_URL=$API_BASE_URL"
+    cat > "$ENV_PROD_FILE" <<EOF
+VITE_API_BASE_URL=$API_BASE_URL
 EOF
+  else
+    echo "Writing $ENV_PROD_FILE for same-origin API (/api/* via CloudFront)"
+    cat > "$ENV_PROD_FILE" <<EOF
+# Leave VITE_API_BASE_URL empty to use same-origin API paths
+VITE_API_BASE_URL=
+EOF
+  fi
   echo
 fi
 
 # ---- BUILD FRONTEND ----
-FRONTEND_DIR="student-study-app"
-DIST_DIR="$FRONTEND_DIR/dist"
-
 if [ ! -f "$FRONTEND_DIR/package.json" ]; then
-  echo "ERROR: package.json not found in $FRONTEND_DIR"
-  exit 1
+  die "package.json not found in $FRONTEND_DIR"
 fi
 
-cd "$FRONTEND_DIR"
-
 echo "Building frontend in $FRONTEND_DIR..."
+pushd "$FRONTEND_DIR" >/dev/null
 npm install
 npm run build
+popd >/dev/null
 
-cd - > /dev/null
+[ -d "$DIST_DIR" ] || die "Build output directory not found: $DIST_DIR"
 
 # ---- DEPLOY TO S3 ----
-echo "Uploading $DIST_DIR -> s3://$S3_BUCKET/ ..."
-aws s3 sync "$DIST_DIR/" "s3://$S3_BUCKET/" --delete
+echo "Uploading static assets -> s3://$S3_BUCKET/assets/ ..."
+if [ -d "$DIST_DIR/assets" ]; then
+  aws s3 sync "$DIST_DIR/assets/" "s3://$S3_BUCKET/assets/" \
+    --delete \
+    --cache-control "public,max-age=31536000,immutable"
+fi
+
+echo "Uploading app files -> s3://$S3_BUCKET/ ..."
+aws s3 sync "$DIST_DIR/" "s3://$S3_BUCKET/" \
+  --delete \
+  --exclude "assets/*" \
+  --exclude "index.html"
+
+if [ -f "$DIST_DIR/index.html" ]; then
+  echo "Uploading index.html with no-cache headers..."
+  aws s3 cp "$DIST_DIR/index.html" "s3://$S3_BUCKET/index.html" \
+    --cache-control "no-cache,no-store,must-revalidate"
+fi
+
+# ---- CLOUDFRONT INVALIDATION ----
+if [ "$INVALIDATE_CLOUDFRONT" = "1" ]; then
+  if [ -n "$CLOUDFRONT_DIST_ID" ]; then
+    echo "Creating CloudFront invalidation on $CLOUDFRONT_DIST_ID ..."
+    INVALIDATION_ID="$(aws cloudfront create-invalidation \
+      --distribution-id "$CLOUDFRONT_DIST_ID" \
+      --paths "/*" \
+      --query "Invalidation.Id" \
+      --output text)"
+    echo "Invalidation ID: $INVALIDATION_ID"
+    if [ "$WAIT_FOR_INVALIDATION" = "1" ]; then
+      echo "Waiting for invalidation to complete..."
+      aws cloudfront wait invalidation-completed \
+        --distribution-id "$CLOUDFRONT_DIST_ID" \
+        --id "$INVALIDATION_ID"
+      echo "Invalidation completed."
+    fi
+  else
+    echo "Skipping invalidation: terraform output 'cloudfront_distribution_id' not available."
+  fi
+fi
+
+LATEST_JS="$(ls "$DIST_DIR"/assets/index-*.js 2>/dev/null | xargs -I{} basename {} | head -n1 || true)"
 
 echo
 echo "Done."
 echo "Frontend deployed to: ${WEBSITE_URL:-"(run 'terraform output -raw frontend_website_url' in $TF_DIR)"}"
-echo "Backend base URL:     http://$API_IP"
+echo "Backend EC2 URL:      http://$API_IP:8000"
+if [ -n "$LATEST_JS" ]; then
+  echo "Built bundle:         $LATEST_JS"
+fi

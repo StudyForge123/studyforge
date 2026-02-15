@@ -1,9 +1,25 @@
-// Point to the Python backend
-const API_BASE = "http://localhost:8000";
+// Prefer explicit env var. Keep localhost only for local development.
+const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
+const isLocalHost = typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const API_BASE = configuredBase || (isLocalHost ? "http://localhost:8000" : "");
+const hasPlaceholder = API_BASE.includes("<") || API_BASE.includes(">");
+
+if (!API_BASE) {
+  // In deployed environments, default to same-origin requests (e.g. CloudFront /api/* behavior).
+  // eslint-disable-next-line no-console
+  console.info("VITE_API_BASE_URL is not set. Using same-origin API paths.");
+}
+if (hasPlaceholder) {
+  // eslint-disable-next-line no-console
+  console.warn("VITE_API_BASE_URL contains a placeholder. Replace it with a real URL.");
+}
 
 async function request(path, options = {}) {
   // Ensure path starts with /
-  const url = `${API_BASE}${path}`;
+  if (hasPlaceholder) {
+    throw new Error("API base URL is a placeholder. Set VITE_API_BASE_URL to your real backend URL.");
+  }
+  const url = API_BASE ? `${API_BASE}${path}` : path;
   const headers = options.headers || {};
 
   // Handle Content-Type for JSON, but skip for FormData (browser sets existing boundary)

@@ -17,7 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app code
 COPY app /app/app
-COPY data /app/data
 
 # Create runtime dirs (uploads/extracted/index) inside container
 RUN mkdir -p /app/data/uploads /app/data/uploads/_extracted /app/data/index
