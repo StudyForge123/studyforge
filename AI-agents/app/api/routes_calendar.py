@@ -117,14 +117,11 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
 
 @router.get("/calendar/events")
 async def api_get_calendar_events(class_ids: str):
-    print(f"DEBUG: api_get_calendar_events called with ids: {class_ids}")
     # expect class_ids as comma-separated string
     sorted_ids = sorted(class_ids.split(","))
     class_ids_key = ",".join(sorted_ids)
     
-    print(f"DEBUG: Querying cache with key: {class_ids_key}")
     cached = await get_calendar_events(class_ids_key)
-    print(f"DEBUG: Cache result: {'Found' if cached else 'Not Found'}")
     
     if cached is None:
         return {"events": []}

@@ -42,13 +42,13 @@ export const api = {
   },
 
   // CALENDAR
-  // Helper to get calendar events by regenerating them (since we don't store them yet)
+  // Fetch cached events (instant load)
   getCalendar: async () => {
     const { classes } = await api.listClasses();
     if (!classes || classes.length === 0) return [];
 
-    const classIds = classes.map(c => c.id);
-    const result = await api.generateCalendar(classIds);
+    const classIds = classes.map(c => c.id).join(",");
+    const result = await request(`/api/calendar/events?class_ids=${classIds}`);
     return result.events || [];
   },
 
