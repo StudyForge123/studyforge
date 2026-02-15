@@ -21,11 +21,15 @@ __pycache__/
 # Local database / index files
 # =========================
 <<<<<<< HEAD
+<<<<<<< HEAD
 data/uploads/
 data/index/
 =======
 data/
 >>>>>>> sulaiman
+=======
+data/
+>>>>>>> main
 *.db
 
 # =========================

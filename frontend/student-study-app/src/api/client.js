@@ -37,6 +37,10 @@ export const api = {
     body: JSON.stringify({ name })
   }),
 
+  deleteClass: (classId) => request(`/api/classes/${classId}`, {
+    method: "DELETE"
+  }),
+
   // FILE MANAGEMENT
   uploadFile: (classId, fileObj, fileType = "material") => {
     const formData = new FormData();
@@ -55,6 +59,10 @@ export const api = {
     const params = fileType ? `?file_type=${fileType}` : "";
     return request(`/api/classes/${classId}/files${params}`);
   },
+
+  deleteFile: (classId, fileId) => request(`/api/classes/${classId}/files/${fileId}`, {
+    method: "DELETE"
+  }),
 
   // CALENDAR
   // Fetch cached events (instant load)
@@ -81,14 +89,19 @@ export const api = {
       num_questions: params.num_questions || 5,
       difficulty: params.difficulty || "medium",
       topic: params.topic || null,
-      instructions: params.instructions || null
+      instructions: params.instructions || null,
+      file_id: params.file_id || null
     })
   }),
 
   // STUDY SESSION
   startStudySession: (params) => request("/api/study/session", {
     method: "POST",
-    body: JSON.stringify(params)
+    body: JSON.stringify({
+      class_id: params.class_id,
+      topic: params.topic,
+      file_id: params.file_id || null
+    })
   }),
 
   // DASHBOARD
@@ -97,7 +110,11 @@ export const api = {
   // CHAT
   sendChatMessage: (params) => request("/api/chat/send", {
     method: "POST",
-    body: JSON.stringify(params)
+    body: JSON.stringify({
+      class_id: params.class_id,
+      message: params.message,
+      file_id: params.file_id || null
+    })
   }),
 
   getChatHistory: (classId) => request(`/api/chat/history?class_id=${classId}`),

@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 ## How to run vite for frontend
 1. Go to `studyforge -> frontend -> student-study-app`
 2. Open terminal 
@@ -13,6 +14,8 @@
 2. Run `.venv/bin/activate`
 3. Run `uvicorn app.main:app --reload`
 =======
+=======
+>>>>>>> main
 # StudyForge
 
 StudyForge is an AI-assisted student learning platform that helps students organize classes, upload course PDFs, generate calendars from syllabi, chat with class materials, and create study sessions and practice quizzes grounded in uploaded documents.
@@ -312,4 +315,7 @@ Current setup is development-friendly and not production hardened. For productio
 4. Add richer file metadata and stable file-level retrieval keys.
 5. Add streaming chat responses and realtime voice support.
 
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main

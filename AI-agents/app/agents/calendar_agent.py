@@ -2,23 +2,30 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 <<<<<<< HEAD
+<<<<<<< HEAD
 from openai import OpenAI
 
 from app import config
 from app.schemas.calendar import CalendarOutput
 =======
+=======
+>>>>>>> main
 import re
 from openai import OpenAI
 
 from app import config
 from app.schemas.calendar import CalendarOutput, CalendarEvent
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 
 # Initialize OpenAI client
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
 You extract academic calendar events from university syllabi.
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 Hard Rules:
@@ -30,6 +37,8 @@ Hard Rules:
 - Keep course names exactly as provided.
 - Include source filename for every event.
 =======
+=======
+>>>>>>> main
 Include exams, quizzes, assignments, projects, administrative dates, AND recurring events (Class Time, Office Hours).
 If there is a weekly schedule table, you MUST read each row and include important dated items from it.
 
@@ -55,7 +64,10 @@ Hard Rules:
    - Include major deadlines (exams, final, major assignments, quizzes).
    - If the syllabus states recurring due rules (e.g., "Homework due Sundays 11:59pm", "Quiz due Mondays 10:30am"),
      emit recurring template events so they can be expanded into concrete due dates.
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 """
 
 def _build_user_payload(items: List[Dict[str, Any]], default_year: int) -> str:
@@ -78,7 +90,10 @@ def _build_user_payload(items: List[Dict[str, Any]], default_year: int) -> str:
     return "".join(parts)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
 from datetime import datetime, timedelta
 
 def _normalize_whitespace(text: str) -> str:
@@ -90,12 +105,12 @@ def _infer_event_type(title: str) -> str:
         return "exam"
     if "quiz" in t:
         return "quiz"
-    if any(k in t for k in ["homework", "assignment", "due", "deadline", "reading"]):
+    if "reading" in t:
+        return "reading"
+    if any(k in t for k in ["homework", "assignment", "due", "deadline"]):
         return "assignment"
     if "project" in t:
         return "project"
-    if "reading" in t:
-        return "reading"
     return "other"
 
 def _to_hhmm(hour: int, minute: int, suffix: str | None) -> str:
@@ -167,8 +182,6 @@ def _extract_table_events(items: List[Dict[str, Any]], default_year: int) -> Lis
                 weeks.append(datetime(default_year, month, day))
             except ValueError:
                 continue
-        if not weeks:
-            continue
         weeks = sorted({w.date(): w for w in weeks}.values(), key=lambda d: d.date())
 
         lower = text.lower()
@@ -297,7 +310,10 @@ def _expand_events(templates: List[Any], default_year: int) -> List[Any]:
                 new_event.recurrence = None
                 expanded.append(new_event)
     return expanded
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 
 def generate_calendar(
     items: List[Dict[str, Any]],
@@ -319,6 +335,7 @@ def generate_calendar(
     )
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     # Parsed structured result
     parsed = response.output_parsed
     for e in parsed.events:
@@ -327,6 +344,8 @@ def generate_calendar(
 
 
 =======
+=======
+>>>>>>> main
     # Parsed structured templates
     parsed = response.output_parsed
     
@@ -352,4 +371,7 @@ def generate_calendar(
     for e in parsed.events:
         e.timezone = "America/New_York"
     return parsed
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main

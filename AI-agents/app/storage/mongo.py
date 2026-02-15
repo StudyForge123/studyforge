@@ -56,7 +56,10 @@ async def get_class(class_id: str) -> Optional[Dict[str, Any]]:
     return d
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
 async def delete_class_data(class_id: str) -> Dict[str, Any]:
     from bson import ObjectId
     db = get_db()
@@ -74,7 +77,10 @@ async def delete_class_data(class_id: str) -> Dict[str, Any]:
         "chat_deleted": chat_res.deleted_count,
     }
 
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 # ---- Files ----
 
 async def insert_file(
@@ -109,7 +115,10 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         out.append(d)
     return out
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
 
 async def delete_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
     from bson import ObjectId
@@ -174,4 +183,7 @@ async def get_calendar_events(class_ids_key: str) -> Optional[List[Dict[str, Any
     db = get_db()
     doc = await db.calendar_cache.find_one({"class_ids_key": class_ids_key})
     return doc["events"] if doc else None
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main

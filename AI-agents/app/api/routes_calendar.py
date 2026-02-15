@@ -15,12 +15,18 @@ from app.storage.mongo import (
     insert_file,
     list_files,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
     delete_file,
     delete_class_data,
     save_calendar_events,
     get_calendar_events,
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 )
 from app.ingest.pdf_text import extract_pdf_text_with_markers
 from app.agents.calendar_agent import generate_calendar
@@ -56,9 +62,12 @@ async def api_list_classes():
     return {"classes": await list_classes()}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 @router.post("/classes/{class_id}/upload/syllabus")
 async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
 =======
+=======
+>>>>>>> main
 from app.ingest.chunking import chunk_text
 from app.ingest.retrieval import get_vector_store
 
@@ -70,13 +79,19 @@ async def api_upload_file(
     file_type: str = "material", # syllabus | material | assessment
     file: UploadFile = File(...)
 ):
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
     cls = await get_class(class_id)
     if not cls:
         raise HTTPException(status_code=404, detail="Class not found")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
     normalized_file_type = (file_type or "material").strip().lower()
     if normalized_file_type not in {"syllabus", "material", "assessment"}:
         raise HTTPException(status_code=400, detail="file_type must be syllabus, material, or assessment")
@@ -86,21 +101,29 @@ async def api_upload_file(
         if existing_syllabi:
             raise HTTPException(status_code=400, detail="Only one syllabus is allowed per class. Delete the existing syllabus first.")
 
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
     safe_name = file.filename.replace("/", "_").replace("\\", "_")
 <<<<<<< HEAD
+<<<<<<< HEAD
     pdf_path = UPLOAD_DIR / f"class_{class_id}__{safe_name}"
 =======
     pdf_path = UPLOAD_DIR / f"class_{class_id}_{normalized_file_type}_{safe_name}"
 >>>>>>> sulaiman
+=======
+    pdf_path = UPLOAD_DIR / f"class_{class_id}_{normalized_file_type}_{safe_name}"
+>>>>>>> main
     content = await file.read()
     pdf_path.write_bytes(content)
 
     marked_text = extract_pdf_text_with_markers(pdf_path)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     text_path = TEXT_DIR / f"class_{class_id}__{safe_name}.txt"
     text_path.write_text(marked_text, encoding="utf-8")
@@ -109,6 +132,8 @@ async def api_upload_file(
         class_id=class_id,
         file_type="syllabus",
 =======
+=======
+>>>>>>> main
     text_path = TEXT_DIR / f"class_{class_id}_{normalized_file_type}_{safe_name}.txt"
     text_path.write_text(marked_text, encoding="utf-8")
 
@@ -131,15 +156,21 @@ async def api_upload_file(
     file_id = await insert_file(
         class_id=class_id,
         file_type=normalized_file_type,
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
         filename=safe_name,
         pdf_path=str(pdf_path),
         extracted_text_path=str(text_path),
     )
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     return {"file_id": file_id, "pdf_path": str(pdf_path), "text_path": str(text_path)}
 =======
+=======
+>>>>>>> main
     return {
         "file_id": file_id, 
         "pdf_path": str(pdf_path), 
@@ -152,33 +183,48 @@ async def api_upload_file(
 @router.post("/classes/{class_id}/upload/syllabus")
 async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
     return await api_upload_file(class_id, "syllabus", file)
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
 
 @router.post("/calendar/generate")
 async def api_generate_calendar(body: CalendarGenerateRequest):
     items = []
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> main
     # Sort IDs to ensure consistent key for the same set of classes
     sorted_ids = sorted(body.class_ids)
     class_ids_key = ",".join(sorted_ids)
 
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
     for cid in body.class_ids:
         cls = await get_class(cid)
         if not cls:
             raise HTTPException(status_code=404, detail=f"Class not found: {cid}")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         syllabi = await list_files(cid, file_type="syllabus")
         if not syllabi:
 =======
+=======
+>>>>>>> main
         # Prefer syllabus, but fall back to any uploaded file
         syllabi = await list_files(cid, file_type="syllabus")
         if not syllabi:
             syllabi = await list_files(cid)  # try any file type
         if not syllabi:
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
             continue
 
         s = syllabi[0]  # most recent
@@ -192,11 +238,14 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
 
     if not items:
 <<<<<<< HEAD
+<<<<<<< HEAD
         raise HTTPException(status_code=400, detail="No syllabi found for provided classes")
 
     out = generate_calendar(items, default_year=body.default_year)
     return out.model_dump()
 =======
+=======
+>>>>>>> main
         raise HTTPException(status_code=400, detail="No files found for the provided classes. Please upload a syllabus or material PDF first.")
 
     out = generate_calendar(items, default_year=body.default_year)
@@ -311,4 +360,7 @@ async def api_get_calendar_events(class_ids: str):
     if cached is None:
         return {"events": []}
     return {"events": cached}
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main

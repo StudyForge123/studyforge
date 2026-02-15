@@ -14,17 +14,23 @@ class CalendarEvent(BaseModel):
     course: str
     type: EventType
 <<<<<<< HEAD
+<<<<<<< HEAD
     due_date: str  # YYYY-MM-DD
     start_time: Optional[str] = None  # HH:MM
     end_time: Optional[str] = None    # HH:MM
 =======
+=======
+>>>>>>> main
     due_date: Optional[str] = None  # YYYY-MM-DD
     start_time: Optional[str] = None  # HH:MM
     end_time: Optional[str] = None    # HH:MM
     recurrence: Optional[str] = None   # e.g. "MWF", "TTh", "Weekly"
     semester: Optional[str] = None     # e.g. "Fall", "Spring", "Summer"
     duration_weeks: Optional[int] = None # e.g. 15
+<<<<<<< HEAD
 >>>>>>> sulaiman
+=======
+>>>>>>> main
     timezone: str = "America/New_York"
     source: SourceRef
 
