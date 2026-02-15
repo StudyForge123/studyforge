@@ -67,8 +67,8 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
     }
 
     return (
-        <div className="p-8 max-w-5xl mx-auto">
-            <div className="mb-8 flex justify-between items-end">
+        <div className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto">
+            <div className="mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">Study & Quiz</h1>
                     <p className="text-slate-500 mt-1">
@@ -265,7 +265,13 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
                                                     disabled={quizSubmitted}
                                                     className={`w-full text-left p-4 border rounded-xl text-sm transition-colors ${
                                                         selectedAnswers[i] === opt
-                                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                                                            ? (
+                                                                quizSubmitted
+                                                                    ? (isCorrect(q, opt)
+                                                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                                                                        : 'border-rose-500 bg-rose-50 text-rose-900')
+                                                                    : 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                                                            )
                                                             : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-indigo-200'
                                                     } ${quizSubmitted ? 'cursor-not-allowed opacity-80' : ''}`}
                                                 >
