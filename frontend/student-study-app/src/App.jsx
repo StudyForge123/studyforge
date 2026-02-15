@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "./api/client";
 
 // Components
@@ -6,22 +6,43 @@ import Dashboard from "./components/Dashboard";
 import Calendar from "./components/Calendar";
 import AllClasses from "./components/AllClasses";
 import Settings from "./components/Settings";
+import StudyQuiz from "./components/StudyQuiz";
+import ClassChat from "./components/ClassChat";
 
-const navItems = ["Dashboard", "Calendar", "All Classes", "Settings"];
+const navItems = ["Dashboard", "Calendar", "All Classes", "Study & Quiz", "Class Chat", "Settings"];
 
 export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
+
+  // Selection state
+  const [selectedClassId, setSelectedClassId] = useState("");
+  const [selectedFileId, setSelectedFileId] = useState("");
+  const [classFiles, setClassFiles] = useState([]);
 
   // Dashboard Data State
   const [dashboard, setDashboard] = useState(null);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [generatingCalendar, setGeneratingCalendar] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  // Agent Results
+  const [quiz, setQuiz] = useState(null);
+  const [studySession, setStudySession] = useState(null);
 
   // Bottom chat State
-  const [mode, setMode] = useState("Study Session");
+  const [chatHistory, setChatHistory] = useState([]);
+  const [mode, setMode] = useState("Chat");
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const promptRef = useRef(null);
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
@@ -33,7 +54,11 @@ export default function App() {
     try {
       const [d, cs] = await Promise.all([api.getDashboard(), api.listClasses()]);
       setDashboard(d);
-      setClasses(cs);
+      const nextClasses = cs.classes || [];
+      setClasses(nextClasses);
+      if (selectedClassId && !nextClasses.some((c) => c.id === selectedClassId)) {
+        setSelectedClassId("");
+      }
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -42,13 +67,50 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Expose api to the browser window for testing
+    window.api = api;
     refresh();
   }, []);
+
+  useEffect(() => {
+    if (!selectedClassId) {
+      setClassFiles([]);
+      setSelectedFileId("");
+      return;
+    }
+    (async () => {
+      try {
+        const data = await api.listFiles(selectedClassId);
+        const files = data.files || [];
+        setClassFiles(files);
+        if (selectedFileId && !files.some((f) => f.id === selectedFileId)) {
+          setSelectedFileId("");
+        }
+      } catch {
+        setClassFiles([]);
+      }
+    })();
+  }, [selectedClassId]);
+
+  const isClassChatTab = activeNav === "Class Chat";
+  const filteredClassFiles = classFiles.filter((f) => !f.class_id || f.class_id === selectedClassId);
+
+  useEffect(() => {
+    if (isClassChatTab && mode !== "Chat") {
+      setMode("Chat");
+    }
+  }, [isClassChatTab, mode]);
+
+  useEffect(() => {
+    if (isClassChatTab && !isComposerCollapsed && promptRef.current) {
+      setTimeout(() => promptRef.current?.focus(), 0);
+    }
+  }, [isClassChatTab, isComposerCollapsed]);
 
   async function handleCreateClass() {
     setErr("");
     try {
-      await api.createClass(form);
+      await api.createClass(form.name);
       setShowAdd(false);
       setForm({ name: "", professor: "", semester: "" });
       await refresh();
@@ -59,28 +121,143 @@ export default function App() {
 
   async function handleGenerateCalendar() {
     setErr("");
+    setGeneratingCalendar(true);
     try {
-      await api.generateCalendar();
+      const classIds = classes.map(c => c.id);
+      await api.generateCalendar(classIds);
       await refresh();
       setActiveNav("Calendar");
+      setToast({ type: "success", message: "Calendar generated successfully." });
     } catch (e) {
       setErr(e.message || "Generate failed");
+      setToast({ type: "error", message: e.message || "Calendar generation failed." });
+    } finally {
+      setGeneratingCalendar(false);
+      setTimeout(() => setToast(null), 3200);
     }
   }
 
   async function handleSend() {
     const text = message.trim();
-    if (!text) return;
+    if (!text || !selectedClassId) {
+      if (!selectedClassId) setErr("Please select a class first.");
+      return;
+    }
     setChatBusy(true);
     setErr("");
     try {
-      await api.chat({ mode, message: text });
-      setMessage("");
+      if (mode === "Chat") {
+        const chatRes = await api.sendChatMessage({
+          class_id: selectedClassId,
+          message: text,
+          file_id: selectedFileId || null,
+        });
+        const history = await api.getChatHistory(selectedClassId);
+        setChatHistory(history.history || []);
+        if (voiceEnabled && chatRes?.reply && "speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(chatRes.reply);
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        }
+        setMessage("");
+        setActiveNav("Class Chat");
+      } else if (mode === "Practice Quiz") {
+        const res = await api.generateQuiz({
+          class_id: selectedClassId,
+          topic: text,
+          file_id: selectedFileId || null,
+        });
+        console.log("Quiz response:", res);
+        setQuiz(res);
+        setMessage("");
+        setActiveNav("Study & Quiz");
+      } else if (mode === "Study Session") {
+        const res = await api.startStudySession({
+          class_id: selectedClassId,
+          topic: text,
+          file_id: selectedFileId || null,
+        });
+        console.log("Study response:", res);
+        setStudySession(res);
+        setMessage("");
+        setActiveNav("Study & Quiz");
+      }
     } catch (e) {
-      setErr(e.message || "Chat failed");
+      console.error("Send error:", e);
+      setErr(e.message || "Operation failed");
     } finally {
       setChatBusy(false);
     }
+  }
+
+  // File Upload State
+  const fileInputRef = useRef(null);
+  const [uploadClassId, setUploadClassId] = useState(null);
+  const [uploadFileType, setUploadFileType] = useState(null);
+
+  function handleUploadClick(classId, forcedType = null) {
+    setUploadClassId(classId);
+    setUploadFileType(forcedType);
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file || !uploadClassId) return;
+
+    setErr("");
+    try {
+      const rawType = uploadFileType || prompt("Upload type? Enter: syllabus OR material", "material") || "material";
+      const normalized = rawType.trim().toLowerCase();
+      const type = normalized === "syllabus" ? "syllabus" : "material";
+      await api.uploadFile(uploadClassId, file, type);
+      alert(`${type} uploaded and indexed successfully!`);
+      await refresh();
+      if (selectedClassId) {
+        const filesData = await api.listFiles(selectedClassId);
+        setClassFiles(filesData.files || []);
+      }
+    } catch (e) {
+      setErr(e.message || "Upload failed");
+    } finally {
+      setUploadClassId(null);
+      setUploadFileType(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function toggleVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setErr("Voice input is not supported in this browser.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop?.();
+      setIsListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      if (transcript) {
+        setMessage((prev) => `${prev}${prev ? " " : ""}${transcript}`.trim());
+      }
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsListening(false);
+    };
+    recognition.onerror = () => {
+      recognitionRef.current = null;
+      setIsListening(false);
+    };
+    setIsListening(true);
+    recognition.start();
   }
 
   // Render logic for main content
@@ -93,14 +270,37 @@ export default function App() {
             classes={classes}
             loading={loading}
             err={err}
+            generatingCalendar={generatingCalendar}
             onAddClass={() => setShowAdd(true)}
             onGenerateCalendar={handleGenerateCalendar}
+            onUploadSyllabus={(classId) => handleUploadClick(classId, "syllabus")}
+            onOpenAllClasses={() => setActiveNav("All Classes")}
+            onOpenCalendar={() => setActiveNav("Calendar")}
+            onOpenStudyQuiz={() => setActiveNav("Study & Quiz")}
           />
         );
       case "Calendar":
         return <Calendar />;
       case "All Classes":
-        return <AllClasses />;
+        return <AllClasses onDataChange={refresh} />;
+      case "Study & Quiz":
+        return (
+          <StudyQuiz
+            quiz={quiz}
+            studySession={studySession}
+            selectedClassId={selectedClassId}
+            classes={classes}
+          />
+        );
+      case "Class Chat":
+        return (
+          <ClassChat
+            chatHistory={chatHistory}
+            selectedClassId={selectedClassId}
+            classes={classes}
+            chatBusy={chatBusy}
+          />
+        );
       case "Settings":
         return <Settings />;
       default:
@@ -108,19 +308,35 @@ export default function App() {
     }
   }
 
+  const composerVisibleTabs = new Set(["Class Chat", "Study & Quiz"]);
+  const shouldShowComposer = composerVisibleTabs.has(activeNav);
+  const shouldRenderComposer = shouldShowComposer && !isComposerCollapsed;
+
+
   return (
     <div className="h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       <div className="flex h-full">
+        {isMobileMenuOpen && (
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+            aria-label="Close menu"
+          />
+        )}
+
         {/* Sidebar */}
-        <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10">
-          <div className="p-8">
+        <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 shadow-sm transition-transform duration-300 flex flex-col ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        } ${isSidebarVisible ? "lg:flex" : "lg:hidden"} lg:static lg:translate-x-0`}>
+          <div className="p-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
                 <span className="text-white font-bold text-xl">S</span>
               </div>
               <div>
                 <div className="text-lg font-bold text-slate-900 tracking-tight leading-none">
-                  StudyHub
+                  StudyForge
                 </div>
                 <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
                   Student Portal
@@ -135,7 +351,10 @@ export default function App() {
               return (
                 <button
                   key={item}
-                  onClick={() => setActiveNav(item)}
+                  onClick={() => {
+                    setActiveNav(item);
+                    setIsMobileMenuOpen(false);
+                  }}
                   className={[
                     "w-full text-left px-4 py-3.5 text-sm font-medium rounded-xl transition-all duration-200 ease-in-out group flex items-center gap-3",
                     active
@@ -166,52 +385,172 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
+          <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur border-b border-slate-200/70 px-3 py-2 sm:px-4 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+            >
+              Menu
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSidebarVisible((prev) => !prev)}
+              className="hidden lg:inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              {isSidebarVisible ? "Hide Menu" : "Show Menu"}
+            </button>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              {activeNav}
+            </div>
+          </div>
 
           {/* Scrollable Page Content */}
-          <div className="flex-1 overflow-y-auto pb-32 scroll-smooth">
+          <div className={`flex-1 overflow-y-auto scroll-smooth ${shouldRenderComposer ? (isClassChatTab ? "pb-36 md:pb-32" : "pb-72 md:pb-44") : "pb-6"}`}>
             {renderContent()}
           </div>
 
-          {/* Bottom Chat Bar (Floating) */}
-          <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-center pointer-events-none">
-            <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
+          {toast && (
+            <div className="absolute top-16 right-4 z-40 animate-pulse">
+              <div className={`px-4 py-3 rounded-xl shadow-xl border backdrop-blur text-sm font-semibold ${
+                toast.type === "success"
+                  ? "bg-emerald-50/95 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50/95 text-rose-800 border-rose-200"
+              }`}>
+                {toast.message}
+              </div>
+            </div>
+          )}
+
+          {shouldShowComposer && !isClassChatTab && (
+            <button
+              type="button"
+              onClick={() => setIsComposerCollapsed((v) => !v)}
+              className={`absolute ${isClassChatTab ? "bottom-24 md:bottom-20" : "bottom-3 md:bottom-8"} right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50`}
+            >
+              {isComposerCollapsed ? "Open Prompt Box" : "Collapse Prompt Box"}
+            </button>
+          )}
+
+          {/* Bottom Prompt Bar (Floating) */}
+          {shouldRenderComposer && (
+            <div className={`absolute ${isClassChatTab ? "bottom-0 md:bottom-0 left-0 right-0" : "bottom-16 md:bottom-20 left-3 md:left-8 right-3 md:right-8"} z-20 flex justify-center pointer-events-none`}>
+              <div className={`w-full ${isClassChatTab ? "max-w-none md:max-w-6xl rounded-none md:rounded-2xl border-x-0 md:border" : "max-w-5xl rounded-2xl border"} bg-white/90 backdrop-blur-xl shadow-2xl shadow-slate-200/50 border-white/20 p-3 space-y-2 pointer-events-auto ring-1 ring-slate-900/5`}>
+              <div className="flex flex-wrap items-center gap-2">
               <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-                className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                value={selectedClassId}
+                onChange={async (e) => {
+                  const id = e.target.value;
+                  setSelectedClassId(id);
+                  setSelectedFileId("");
+                  if (id) {
+                    const hist = await api.getChatHistory(id);
+                    setChatHistory(hist.history || []);
+                    const filesData = await api.listFiles(id);
+                    setClassFiles(filesData.files || []);
+                  } else {
+                    setClassFiles([]);
+                  }
+                }}
+                className="w-full sm:w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
                 style={{ backgroundImage: 'none' }}
               >
-                <option>Study Session</option>
-                <option>Practice Quiz</option>
-                <option>Practice Exam</option>
+                <option value="">Select Class...</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
 
-              <div className="h-6 w-px bg-slate-100 mx-1" />
-
-              <input
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="flex-1 bg-transparent px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none text-slate-800"
-                placeholder="Ask your AI assistant..."
-              />
-
-              <button
-                onClick={handleSend}
-                disabled={chatBusy}
-                className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:shadow-none hover:translate-y-[-1px] active:translate-y-[0px]"
+              <select
+                value={selectedFileId}
+                onChange={(e) => setSelectedFileId(e.target.value)}
+                disabled={!selectedClassId}
+                className="w-full sm:w-56 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundImage: 'none' }}
               >
-                {chatBusy ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" />
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce delay-75" />
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce delay-150" />
-                  </span>
-                ) : (
-                  "Send"
-                )}
-              </button>
+                <option value="">All Class Files</option>
+                {filteredClassFiles.map((f) => (
+                  <option key={f.id} value={f.id}>{f.file_type === "syllabus" ? "[Syllabus] " : ""}{f.filename}</option>
+                ))}
+              </select>
+
+              {isClassChatTab ? (
+                <div className="w-full sm:w-48 bg-slate-50 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200">
+                  Chat
+                </div>
+              ) : (
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="w-full sm:w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                  style={{ backgroundImage: 'none' }}
+                >
+                  <option>Chat</option>
+                  <option>Study Session</option>
+                  <option>Practice Quiz</option>
+                </select>
+              )}
+              </div>
+
+              <div className="flex flex-col md:flex-row items-stretch gap-2">
+                <textarea
+                  ref={promptRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  rows={isClassChatTab ? 2 : 3}
+                  className="w-full md:flex-1 resize-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-slate-800"
+                  placeholder={`${mode === "Chat" ? "Ask your AI assistant..." : `Enter topic for ${mode}...`} (Ctrl/Cmd+Enter to send)`}
+                />
+
+                <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+                  <button
+                    onClick={handleSend}
+                    disabled={chatBusy}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:shadow-none"
+                  >
+                    {chatBusy ? "Sending..." : "Send"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleVoiceInput}
+                    className={`w-full rounded-xl px-4 py-3 text-sm font-semibold border transition-colors ${
+                      isListening ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-white text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    {isListening ? "Listening..." : "Voice Input"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVoiceEnabled((v) => !v)}
+                    className={`w-full rounded-xl px-4 py-3 text-sm font-semibold border transition-colors col-span-2 md:col-span-1 ${
+                      voiceEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    {voiceEnabled ? "Voice Reply: On" : "Voice Reply: Off"}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+            </div>
+          )}
+
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".pdf"
+            className="hidden"
+            style={{ display: 'none' }}
+          />
 
           {/* Add Class Modal - Global Overlay */}
           {showAdd && (
@@ -272,4 +611,3 @@ export default function App() {
     </div>
   );
 }
-
