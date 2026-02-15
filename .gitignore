@@ -6,3 +6,16 @@ infrastructure/app/.terraform.lock.hcl
 infrastructure/app/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/LICENSE.txt
 infrastructure/app/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/terraform-provider-aws_v5.100.0_x5
 frontend/package-lock.json
+
+# Python virtual environments and caches
+AI-agents/.venv/
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local environment files
+**/.env
+**/.env.local
