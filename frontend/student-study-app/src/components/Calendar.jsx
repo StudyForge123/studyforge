@@ -12,6 +12,16 @@ export default function Calendar() {
             try {
                 const data = await api.getCalendar();
                 setEvents(data);
+                // Auto-navigate to the month of the first event if available
+                if (data && data.length > 0) {
+                    const firstEvent = data[0];
+                    const dateStr = firstEvent.due_date || firstEvent.date;
+                    if (dateStr) {
+                        const [y, m, d] = dateStr.split('-').map(Number);
+                        // Month is 0-indexed in JS Date
+                        setCurrentDate(new Date(y, m - 1, d));
+                    }
+                }
             } catch (e) {
                 setErr(e.message || "Failed to load calendar");
             } finally {
@@ -94,7 +104,7 @@ export default function Calendar() {
 
                         {days.map((day) => {
                             const dateStr = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                            const dayEvents = events.filter(e => e.date === dateStr || e.date?.startsWith(dateStr));
+                            const dayEvents = events.filter(e => (e.due_date || e.date) === dateStr || (e.due_date || e.date)?.startsWith(dateStr));
                             const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
 
                             return (
@@ -105,9 +115,16 @@ export default function Calendar() {
 
                                     <div className="space-y-1.5 overflow-y-auto max-h-[90px] custom-scrollbar">
                                         {dayEvents.map((ev, i) => (
-                                            <div key={i} className="text-[10px] px-2.5 py-1.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 rounded-lg font-semibold border border-indigo-100/50 truncate transition-all cursor-default flex items-center gap-1.5 group/event">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover/event:bg-indigo-600 transition-colors" />
-                                                {ev.title || ev.name}
+                                            <div key={i} className="text-[10px] px-2.5 py-1.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 rounded-lg font-semibold border border-indigo-100/50 transition-all cursor-default flex flex-col gap-0.5 group/event">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover/event:bg-indigo-600 transition-colors" />
+                                                    <span className="truncate">{ev.title || ev.name}</span>
+                                                </div>
+                                                {(ev.start_time || ev.end_time) && (
+                                                    <div className="text-[9px] text-indigo-400 pl-3 font-medium">
+                                                        {ev.start_time || ""} {ev.end_time ? ` - ${ev.end_time}` : ""}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>

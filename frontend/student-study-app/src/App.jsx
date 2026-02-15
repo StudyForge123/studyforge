@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "./api/client";
 
 // Components
@@ -33,7 +33,7 @@ export default function App() {
     try {
       const [d, cs] = await Promise.all([api.getDashboard(), api.listClasses()]);
       setDashboard(d);
-      setClasses(cs);
+      setClasses(cs.classes || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -42,13 +42,15 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Expose api to the browser window for testing
+    window.api = api;
     refresh();
   }, []);
 
   async function handleCreateClass() {
     setErr("");
     try {
-      await api.createClass(form);
+      await api.createClass(form.name);
       setShowAdd(false);
       setForm({ name: "", professor: "", semester: "" });
       await refresh();
@@ -60,7 +62,8 @@ export default function App() {
   async function handleGenerateCalendar() {
     setErr("");
     try {
-      await api.generateCalendar();
+      const classIds = classes.map(c => c.id);
+      await api.generateCalendar(classIds);
       await refresh();
       setActiveNav("Calendar");
     } catch (e) {
@@ -83,6 +86,34 @@ export default function App() {
     }
   }
 
+  // File Upload State
+  const fileInputRef = useRef(null);
+  const [uploadClassId, setUploadClassId] = useState(null);
+
+  function handleUploadClick(classId) {
+    setUploadClassId(classId);
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file || !uploadClassId) return;
+
+    setErr("");
+    try {
+      await api.uploadSyllabus(uploadClassId, file);
+      // Optional: Show success message or refresh
+      alert("Syllabus uploaded successfully!");
+      await refresh();
+    } catch (e) {
+      setErr(e.message || "Upload failed");
+    } finally {
+      // Reset
+      setUploadClassId(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   // Render logic for main content
   function renderContent() {
     switch (activeNav) {
@@ -95,6 +126,7 @@ export default function App() {
             err={err}
             onAddClass={() => setShowAdd(true)}
             onGenerateCalendar={handleGenerateCalendar}
+            onUploadSyllabus={handleUploadClick}
           />
         );
       case "Calendar":
@@ -213,6 +245,16 @@ export default function App() {
             </div>
           </div>
 
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".pdf"
+            className="hidden"
+            style={{ display: 'none' }}
+          />
+
           {/* Add Class Modal - Global Overlay */}
           {showAdd && (
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 z-50">
@@ -272,4 +314,3 @@ export default function App() {
     </div>
   );
 }
-

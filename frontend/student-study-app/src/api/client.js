@@ -1,14 +1,21 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+// Point to the Python backend
+const API_BASE = "http://localhost:8000";
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
+  // Ensure path starts with /
+  const url = `${API_BASE}${path}`;
+  const headers = options.headers || {};
+
+  // Handle Content-Type for JSON, but skip for FormData (browser sets existing boundary)
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(url, { ...options, headers });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText} ${text}`);
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
   }
 
   const ct = res.headers.get("content-type") || "";
@@ -16,28 +23,47 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // Dashboard
-  getDashboard: () => request("/api/dashboard"),
-
-  // Classes
+  // CLASS MANAGEMENT
   listClasses: () => request("/api/classes"),
-  createClass: (payload) =>
-    request("/api/classes", { method: "POST", body: JSON.stringify(payload) }),
-  getClass: (id) => request(`/api/classes/${id}`),
 
-  // Upload syllabus (S3 presigned)
-  getUploadUrl: (classId, fileName, contentType) =>
-    request(`/api/classes/${classId}/syllabus/upload-url`, {
+  createClass: (name) => request("/api/classes", {
+    method: "POST",
+    body: JSON.stringify({ name }) // Backend expects { "name": "..." }
+  }),
+
+  // FILE UPLOAD (Direct to Backend)
+  uploadSyllabus: (classId, fileObj) => {
+    const formData = new FormData();
+    formData.append("file", fileObj);
+    return request(`/api/classes/${classId}/upload/syllabus`, {
       method: "POST",
-      body: JSON.stringify({ fileName, contentType }),
+      body: formData
+    });
+  },
+
+  // CALENDAR
+  // Helper to get calendar events by regenerating them (since we don't store them yet)
+  getCalendar: async () => {
+    const { classes } = await api.listClasses();
+    if (!classes || classes.length === 0) return [];
+
+    const classIds = classes.map(c => c.id);
+    const result = await api.generateCalendar(classIds);
+    return result.events || [];
+  },
+
+  generateCalendar: (classIds, defaultYear = new Date().getFullYear()) =>
+    request("/api/calendar/generate", {
+      method: "POST",
+      body: JSON.stringify({ class_ids: classIds, default_year: defaultYear })
     }),
 
-  // Calendar / schedule
-  generateCalendar: (classId) =>
-    request(`/api/classes/${classId}/calendar/generate`, { method: "POST" }),
-  getCalendar: () => request("/api/calendar"),
+  // DASHBOARD
+  getDashboard: () => request("/api/dashboard"),
 
-  // Chat / AI
-  chat: (payload) =>
-    request("/api/chat", { method: "POST", body: JSON.stringify(payload) }),
+  // CHAT
+  chat: (params) => request("/api/chat", {
+    method: "POST",
+    body: JSON.stringify(params)
+  }),
 };

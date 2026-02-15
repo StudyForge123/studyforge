@@ -88,3 +88,17 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         d["id"] = str(d.pop("_id"))
         out.append(d)
     return out
+# ---- Calendar Caching ----
+
+async def save_calendar_events(class_ids_key: str, events: List[Dict[str, Any]]) -> None:
+    db = get_db()
+    await db.calendar_cache.update_one(
+        {"class_ids_key": class_ids_key},
+        {"$set": {"events": events, "updated_at": __import__("datetime").datetime.utcnow()}},
+        upsert=True
+    )
+
+async def get_calendar_events(class_ids_key: str) -> Optional[List[Dict[str, Any]]]:
+    db = get_db()
+    doc = await db.calendar_cache.find_one({"class_ids_key": class_ids_key})
+    return doc["events"] if doc else None

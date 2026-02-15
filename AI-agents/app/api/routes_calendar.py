@@ -14,6 +14,8 @@ from app.storage.mongo import (
     get_class,
     insert_file,
     list_files,
+    save_calendar_events,
+    get_calendar_events,
 )
 from app.ingest.pdf_text import extract_pdf_text_with_markers
 from app.agents.calendar_agent import generate_calendar
@@ -80,6 +82,10 @@ async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
 @router.post("/calendar/generate")
 async def api_generate_calendar(body: CalendarGenerateRequest):
     items = []
+    # Sort IDs to ensure consistent key for the same set of classes
+    sorted_ids = sorted(body.class_ids)
+    class_ids_key = ",".join(sorted_ids)
+
     for cid in body.class_ids:
         cls = await get_class(cid)
         if not cls:
@@ -102,4 +108,24 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
         raise HTTPException(status_code=400, detail="No syllabi found for provided classes")
 
     out = generate_calendar(items, default_year=body.default_year)
-    return out.model_dump()
+    events = out.model_dump()["events"]
+    
+    # Cache the result
+    await save_calendar_events(class_ids_key, events)
+    
+    return {"events": events}
+
+@router.get("/calendar/events")
+async def api_get_calendar_events(class_ids: str):
+    print(f"DEBUG: api_get_calendar_events called with ids: {class_ids}")
+    # expect class_ids as comma-separated string
+    sorted_ids = sorted(class_ids.split(","))
+    class_ids_key = ",".join(sorted_ids)
+    
+    print(f"DEBUG: Querying cache with key: {class_ids_key}")
+    cached = await get_calendar_events(class_ids_key)
+    print(f"DEBUG: Cache result: {'Found' if cached else 'Not Found'}")
+    
+    if cached is None:
+        return {"events": []}
+    return {"events": cached}
