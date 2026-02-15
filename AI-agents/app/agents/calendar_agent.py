@@ -11,6 +11,7 @@ client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
 You extract academic calendar events from university syllabi.
+Include exams, quizzes, assignments, projects, AND administrative dates (e.g., drop deadlines, holidays, tuition refund dates).
 
 Hard Rules:
 - Use ONLY the provided syllabus text.
@@ -20,6 +21,7 @@ Hard Rules:
 - If only month/day is given, infer the year using the provided default_year.
 - Keep course names exactly as provided.
 - Include source filename for every event.
+- For administrative dates, set type to 'administrative'.
 """
 
 def _build_user_payload(items: List[Dict[str, Any]], default_year: int) -> str:

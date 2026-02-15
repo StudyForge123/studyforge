@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 
-EventType = Literal["assignment", "quiz", "exam", "reading", "project", "other"]
+EventType = Literal["assignment", "quiz", "exam", "reading", "project", "administrative", "other"]
 
 class SourceRef(BaseModel):
     filename: str
