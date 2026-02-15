@@ -46,3 +46,19 @@ variable "certificate_arn" {
   type    = string
   default = ""
 }
+
+variable "cognito_domain_prefix" {
+  type        = string
+  default     = "studyforge"
+  description = "Unique prefix for the Cognito hosted UI"
+}
+
+variable "callback_urls" {
+  type    = list(string)
+  default = ["http://localhost:3000"]
+}
+
+variable "logout_urls" {
+  type    = list(string)
+  default = ["http://localhost:3000"]
+}

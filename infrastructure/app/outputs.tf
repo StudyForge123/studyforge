@@ -29,3 +29,15 @@ output "cloudfront_domain_name" {
 output "cloudfront_hosted_zone_id" {
   value = aws_cloudfront_distribution.site.hosted_zone_id
 }
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.main.id
+}
+
+output "cognito_client_id" {
+  value = aws_cognito_user_pool_client.web.id
+}
+
+output "cognito_domain" {
+  value = "https://${aws_cognito_user_pool_domain.main.domain}.auth.us-east-1.amazoncognito.com"
+}
