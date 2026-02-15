@@ -55,6 +55,23 @@ async def get_class(class_id: str) -> Optional[Dict[str, Any]]:
     d["id"] = str(d.pop("_id"))
     return d
 
+async def delete_class_data(class_id: str) -> Dict[str, Any]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(class_id)
+    except Exception:
+        return {"class_deleted": False, "files_deleted": 0, "chat_deleted": 0}
+
+    class_res = await db.classes.delete_one({"_id": oid})
+    files_res = await db.files.delete_many({"class_id": class_id})
+    chat_res = await db.chat_history.delete_many({"class_id": class_id})
+    return {
+        "class_deleted": class_res.deleted_count > 0,
+        "files_deleted": files_res.deleted_count,
+        "chat_deleted": chat_res.deleted_count,
+    }
+
 # ---- Files ----
 
 async def insert_file(
@@ -88,3 +105,67 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         d["id"] = str(d.pop("_id"))
         out.append(d)
     return out
+
+async def delete_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(file_id)
+    except Exception:
+        return None
+
+    deleted = await db.files.find_one_and_delete({"_id": oid, "class_id": class_id})
+    if not deleted:
+        return None
+    deleted["id"] = str(deleted.pop("_id"))
+    return deleted
+
+async def get_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(file_id)
+    except Exception:
+        return None
+
+    d = await db.files.find_one({"_id": oid, "class_id": class_id})
+    if not d:
+        return None
+    d["id"] = str(d.pop("_id"))
+    return d
+
+# ---- Chat History ----
+
+async def save_chat_message(class_id: str, role: str, message: str) -> None:
+    db = get_db()
+    doc = {
+        "class_id": class_id,
+        "role": role,  # user | assistant
+        "message": message,
+        "created_at": __import__("datetime").datetime.utcnow(),
+    }
+    await db.chat_history.insert_one(doc)
+
+async def list_chat_history(class_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    db = get_db()
+    cur = db.chat_history.find({"class_id": class_id}).sort("created_at", 1).limit(limit)
+    out = []
+    async for d in cur:
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    return out
+
+# ---- Calendar Caching ----
+
+async def save_calendar_events(class_ids_key: str, events: List[Dict[str, Any]]) -> None:
+    db = get_db()
+    await db.calendar_cache.update_one(
+        {"class_ids_key": class_ids_key},
+        {"$set": {"events": events, "updated_at": __import__("datetime").datetime.utcnow()}},
+        upsert=True
+    )
+
+async def get_calendar_events(class_ids_key: str) -> Optional[List[Dict[str, Any]]]:
+    db = get_db()
+    doc = await db.calendar_cache.find_one({"class_ids_key": class_ids_key})
+    return doc["events"] if doc else None

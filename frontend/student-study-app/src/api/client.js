@@ -1,8 +1,10 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+// Point to the Python backend
+const API_BASE = "http://localhost:8000";
 
 import { fetchAuthSession } from "aws-amplify/auth";
 
 async function request(path, options = {}) {
+<<<<<<< HEAD
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
 
   try {
@@ -18,10 +20,22 @@ async function request(path, options = {}) {
     headers,
     ...options,
   });
+=======
+  // Ensure path starts with /
+  const url = `${API_BASE}${path}`;
+  const headers = options.headers || {};
+
+  // Handle Content-Type for JSON, but skip for FormData (browser sets existing boundary)
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(url, { ...options, headers });
+>>>>>>> aec02e91d08cdf7d14d441bf20f6f180428e4ba2
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText} ${text}`);
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
   }
 
   const ct = res.headers.get("content-type") || "";
@@ -29,28 +43,102 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // Dashboard
-  getDashboard: () => request("/api/dashboard"),
-
-  // Classes
+  // CLASS MANAGEMENT
   listClasses: () => request("/api/classes"),
-  createClass: (payload) =>
-    request("/api/classes", { method: "POST", body: JSON.stringify(payload) }),
-  getClass: (id) => request(`/api/classes/${id}`),
 
-  // Upload syllabus (S3 presigned)
-  getUploadUrl: (classId, fileName, contentType) =>
-    request(`/api/classes/${classId}/syllabus/upload-url`, {
+  // Alias for components that use getClasses
+  getClasses: async () => {
+    const data = await request("/api/classes");
+    return data.classes || [];
+  },
+
+  createClass: (name) => request("/api/classes", {
+    method: "POST",
+    body: JSON.stringify({ name })
+  }),
+
+  deleteClass: (classId) => request(`/api/classes/${classId}`, {
+    method: "DELETE"
+  }),
+
+  // FILE MANAGEMENT
+  uploadFile: (classId, fileObj, fileType = "material") => {
+    const formData = new FormData();
+    formData.append("file", fileObj);
+    return request(`/api/classes/${classId}/upload?file_type=${fileType}`, {
       method: "POST",
-      body: JSON.stringify({ fileName, contentType }),
+      body: formData
+    });
+  },
+
+  // Legacy support or alias
+  uploadSyllabus: (classId, fileObj) => api.uploadFile(classId, fileObj, "syllabus"),
+
+  // List files for a class
+  listFiles: (classId, fileType = null) => {
+    const params = fileType ? `?file_type=${fileType}` : "";
+    return request(`/api/classes/${classId}/files${params}`);
+  },
+
+  deleteFile: (classId, fileId) => request(`/api/classes/${classId}/files/${fileId}`, {
+    method: "DELETE"
+  }),
+
+  // CALENDAR
+  // Fetch cached events (instant load)
+  getCalendar: async () => {
+    const { classes } = await api.listClasses();
+    if (!classes || classes.length === 0) return [];
+
+    const classIds = classes.map(c => c.id).join(",");
+    const result = await request(`/api/calendar/events?class_ids=${classIds}`);
+    return result.events || [];
+  },
+
+  generateCalendar: (classIds, defaultYear = new Date().getFullYear()) =>
+    request("/api/calendar/generate", {
+      method: "POST",
+      body: JSON.stringify({ class_ids: classIds, default_year: defaultYear })
     }),
 
-  // Calendar / schedule
-  generateCalendar: (classId) =>
-    request(`/api/classes/${classId}/calendar/generate`, { method: "POST" }),
-  getCalendar: () => request("/api/calendar"),
+  // QUIZ
+  generateQuiz: (params) => request("/api/quiz/generate", {
+    method: "POST",
+    body: JSON.stringify({
+      class_id: params.class_id,
+      num_questions: params.num_questions || 5,
+      difficulty: params.difficulty || "medium",
+      topic: params.topic || null,
+      instructions: params.instructions || null,
+      file_id: params.file_id || null
+    })
+  }),
 
-  // Chat / AI
-  chat: (payload) =>
-    request("/api/chat", { method: "POST", body: JSON.stringify(payload) }),
+  // STUDY SESSION
+  startStudySession: (params) => request("/api/study/session", {
+    method: "POST",
+    body: JSON.stringify({
+      class_id: params.class_id,
+      topic: params.topic,
+      file_id: params.file_id || null
+    })
+  }),
+
+  // DASHBOARD
+  getDashboard: () => request("/api/dashboard"),
+
+  // CHAT
+  sendChatMessage: (params) => request("/api/chat/send", {
+    method: "POST",
+    body: JSON.stringify({
+      class_id: params.class_id,
+      message: params.message,
+      file_id: params.file_id || null
+    })
+  }),
+
+  getChatHistory: (classId) => request(`/api/chat/history?class_id=${classId}`),
+
+  // Legacy alias
+  chat: (params) => api.sendChatMessage(params),
 };

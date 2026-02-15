@@ -1,25 +1,26 @@
 import { useMemo } from "react";
 
-function StatCard({ label, value, color }) {
+function StatCard({ label, value, color, onClick }) {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-4px_rgba(6,81,237,0.1)] border border-slate-100/50 hover:shadow-lg hover:shadow-indigo-500/5 transition-all duration-300 group">
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left w-full bg-white p-6 rounded-2xl shadow-[0_2px_10px_-4px_rgba(6,81,237,0.1)] border border-slate-100/50 hover:shadow-lg hover:shadow-indigo-500/5 transition-all duration-300 group hover:-translate-y-0.5"
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</div>
         <div className={`w-2 h-2 rounded-full ${color?.replace('text-', 'bg-') || 'bg-slate-900'} opacity-50 group-hover:opacity-100 transition-opacity`} />
       </div>
       <div className={`text-4xl font-bold tracking-tight ${color || "text-slate-900"}`}>{value ?? "-"}</div>
-    </div>
+    </button>
   );
 }
 
-function ClassCard({ c, onOpen }) {
+function ClassCard({ c, onOpen, onUploadSyllabus }) {
   const progress = c.progress ?? 0;
 
   return (
-    <button
-      onClick={() => onOpen?.(c)}
-      className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 group w-full"
-    >
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 group w-full relative">
       <div className="flex justify-between items-start mb-4">
         <div>
           <div className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</div>
@@ -44,12 +45,24 @@ function ClassCard({ c, onOpen }) {
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-50 flex items-center gap-2 text-xs text-slate-500">
-          <span className="font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">Next Exam</span>
-          <span>{c.nextExamDate || "Not scheduled"}</span>
+        <div className="pt-4 border-t border-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">Next Exam</span>
+            <span>{c.nextExamDate || "Not scheduled"}</span>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUploadSyllabus?.(c.id);
+            }}
+            className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline"
+          >
+            Upload Syllabus
+          </button>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -58,20 +71,31 @@ export default function Dashboard({
   classes,
   loading,
   err,
+  generatingCalendar,
   onAddClass,
   onGenerateCalendar,
+  onUploadSyllabus,
+  onOpenAllClasses,
+  onOpenCalendar,
+  onOpenStudyQuiz,
 }) {
+
   const stats = useMemo(() => {
     return [
-      { label: "Active Classes", value: dashboard?.activeClasses, color: "text-indigo-600" },
-      { label: "Upcoming Deadlines", value: dashboard?.upcomingDeadlines, color: "text-amber-500" },
-      { label: "Study Sessions", value: dashboard?.scheduledSessions, color: "text-emerald-500" },
+      { label: "Active Classes", value: dashboard?.activeClasses, color: "text-indigo-600", onClick: onOpenAllClasses },
+      { label: "Upcoming Deadlines", value: dashboard?.upcomingDeadlines, color: "text-amber-500", onClick: onOpenCalendar },
+      { label: "Study Sessions", value: dashboard?.scheduledSessions, color: "text-emerald-500", onClick: onOpenStudyQuiz },
     ];
-  }, [dashboard]);
+  }, [dashboard, onOpenAllClasses, onOpenCalendar, onOpenStudyQuiz]);
 
   return (
+<<<<<<< HEAD
     <div className="px-4 py-6 md:px-8 md:py-10 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 md:mb-10">
+=======
+    <div className="px-4 sm:px-6 md:px-8 py-6 md:py-10 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+>>>>>>> aec02e91d08cdf7d14d441bf20f6f180428e4ba2
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 mb-2">
             Dashboard
@@ -85,9 +109,17 @@ export default function Dashboard({
           {/* Actions */}
           <button
             onClick={onGenerateCalendar}
+<<<<<<< HEAD
             className="flex-1 md:flex-none justify-center bg-white border border-slate-200 text-slate-700 px-5 py-2.5 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+=======
+            disabled={generatingCalendar}
+            className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+>>>>>>> aec02e91d08cdf7d14d441bf20f6f180428e4ba2
           >
-            Refesh Calendar
+            {generatingCalendar && (
+              <span className="inline-block w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            )}
+            {generatingCalendar ? "Generating..." : "Generate Calendar"}
           </button>
           <button
             onClick={onAddClass}
@@ -106,7 +138,7 @@ export default function Dashboard({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
         {stats.map((s) => (
-          <StatCard key={s.label} label={s.label} value={s.value} color={s.color} />
+          <StatCard key={s.label} label={s.label} value={s.value} color={s.color} onClick={s.onClick} />
         ))}
       </div>
 
@@ -122,7 +154,12 @@ export default function Dashboard({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {classes.map((c) => (
-              <ClassCard key={c.id || c.name} c={c} onOpen={() => { }} />
+              <ClassCard
+                key={c.id || c.name}
+                c={c}
+                onOpen={() => { }}
+                onUploadSyllabus={onUploadSyllabus}
+              />
             ))}
 
             {/* Empty State / Add New Placeholder */}
