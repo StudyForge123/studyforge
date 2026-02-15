@@ -5,9 +5,12 @@ import { api } from "./api/client";
 import Dashboard from "./components/Dashboard";
 import Calendar from "./components/Calendar";
 import AllClasses from "./components/AllClasses";
+import Quiz from "./components/Quiz";
+import StudySession from "./components/StudySession";
+import Chat from "./components/Chat";
 import Settings from "./components/Settings";
 
-const navItems = ["Dashboard", "Calendar", "All Classes", "Settings"];
+const navItems = ["Dashboard", "Calendar", "All Classes", "Quiz", "Study Session", "Chat", "Settings"];
 
 export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
@@ -17,11 +20,6 @@ export default function App() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
-  // Bottom chat State
-  const [mode, setMode] = useState("Study Session");
-  const [message, setMessage] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
@@ -33,7 +31,7 @@ export default function App() {
     try {
       const [d, cs] = await Promise.all([api.getDashboard(), api.listClasses()]);
       setDashboard(d);
-      setClasses(cs);
+      setClasses(cs || []);
     } catch (e) {
       setErr(e.message || "Failed to load");
     } finally {
@@ -60,26 +58,17 @@ export default function App() {
   async function handleGenerateCalendar() {
     setErr("");
     try {
-      await api.generateCalendar();
+      // Generate calendar for all classes
+      const classIds = classes.map(c => c.id);
+      if (classIds.length === 0) {
+        setErr("No classes found. Please add a class first.");
+        return;
+      }
+      await api.generateCalendar(classIds);
       await refresh();
       setActiveNav("Calendar");
     } catch (e) {
       setErr(e.message || "Generate failed");
-    }
-  }
-
-  async function handleSend() {
-    const text = message.trim();
-    if (!text) return;
-    setChatBusy(true);
-    setErr("");
-    try {
-      await api.chat({ mode, message: text });
-      setMessage("");
-    } catch (e) {
-      setErr(e.message || "Chat failed");
-    } finally {
-      setChatBusy(false);
     }
   }
 
@@ -101,6 +90,12 @@ export default function App() {
         return <Calendar />;
       case "All Classes":
         return <AllClasses />;
+      case "Quiz":
+        return <Quiz />;
+      case "Study Session":
+        return <StudySession />;
+      case "Chat":
+        return <Chat />;
       case "Settings":
         return <Settings />;
       default:
@@ -168,49 +163,8 @@ export default function App() {
         <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
 
           {/* Scrollable Page Content */}
-          <div className="flex-1 overflow-y-auto pb-32 scroll-smooth">
+          <div className="flex-1 overflow-y-auto scroll-smooth">
             {renderContent()}
-          </div>
-
-          {/* Bottom Chat Bar (Floating) */}
-          <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-center pointer-events-none">
-            <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-                className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
-                style={{ backgroundImage: 'none' }}
-              >
-                <option>Study Session</option>
-                <option>Practice Quiz</option>
-                <option>Practice Exam</option>
-              </select>
-
-              <div className="h-6 w-px bg-slate-100 mx-1" />
-
-              <input
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="flex-1 bg-transparent px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none text-slate-800"
-                placeholder="Ask your AI assistant..."
-              />
-
-              <button
-                onClick={handleSend}
-                disabled={chatBusy}
-                className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:shadow-none hover:translate-y-[-1px] active:translate-y-[0px]"
-              >
-                {chatBusy ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce" />
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce delay-75" />
-                    <span className="w-2 h-2 bg-white/50 rounded-full animate-bounce delay-150" />
-                  </span>
-                ) : (
-                  "Send"
-                )}
-              </button>
-            </div>
           </div>
 
           {/* Add Class Modal - Global Overlay */}
