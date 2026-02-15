@@ -31,3 +31,18 @@ variable "mongo_secret_name" {
   type    = string
   default = "studybuddy/mongodb"
 }
+
+variable "domain_name" {
+  type    = string
+  default = ""
+}
+
+variable "custom_domain_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "certificate_arn" {
+  type    = string
+  default = ""
+}
