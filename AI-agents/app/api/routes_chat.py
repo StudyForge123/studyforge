@@ -6,7 +6,7 @@ from typing import Optional
 from openai import OpenAI
 
 from app import config
-from app.storage.mongo import save_chat_message, list_chat_history
+from app.storage.mongo import save_chat_message, list_chat_history, get_file
 from app.ingest.retrieval import get_vector_store
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -21,6 +21,7 @@ Be concise, accurate, and reference the source material when possible."""
 class ChatRequest(BaseModel):
     class_id: str
     message: str
+    file_id: Optional[str] = None
 
 
 @router.post("/send")
@@ -33,10 +34,17 @@ async def api_chat_send(body: ChatRequest):
     # Save user message
     await save_chat_message(body.class_id, "user", body.message)
 
+    filename_filter = None
+    if body.file_id:
+        f = await get_file(body.file_id, body.class_id)
+        if not f:
+            raise HTTPException(status_code=404, detail="Selected file not found for class")
+        filename_filter = f["filename"]
+
     # Retrieve relevant chunks via RAG
     try:
         vs = get_vector_store(body.class_id)
-        chunks = vs.search(body.message, top_k=5)
+        chunks = vs.search(body.message, top_k=5, filename=filename_filter)
     except Exception:
         chunks = []
 
@@ -57,7 +65,7 @@ async def api_chat_send(body: ChatRequest):
 
     messages.append({
         "role": "user",
-        "content": f"### RETRIEVED CLASS MATERIAL:\n{context_text}\n\n### STUDENT QUESTION:\n{body.message}"
+        "content": f"### RETRIEVED CLASS MATERIAL:\n{context_text}\n\n### STUDENT QUESTION:\n{body.message}\n\n### ACTIVE FILE FILTER:\n{filename_filter if filename_filter else 'None (all class files)'}"
     })
 
     # Call OpenAI

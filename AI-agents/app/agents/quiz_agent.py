@@ -23,13 +23,14 @@ def generate_quiz(
     num_questions: int,
     difficulty: str,
     topic: Optional[str] = None,
-    instructions: Optional[str] = None
+    instructions: Optional[str] = None,
+    filename_filter: Optional[str] = None,
 ) -> QuizOutput:
     
     # 1. Retrieve relevant material
     query = topic if topic else "comprehensive core concepts"
     vs = get_vector_store(class_id)
-    chunks = vs.search(query, top_k=10) # Retrieve enough context
+    chunks = vs.search(query, top_k=10, filename=filename_filter) # Retrieve enough context
     
     if not chunks:
         return QuizOutput(questions=[])

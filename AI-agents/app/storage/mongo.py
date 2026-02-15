@@ -120,6 +120,20 @@ async def delete_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
     deleted["id"] = str(deleted.pop("_id"))
     return deleted
 
+async def get_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(file_id)
+    except Exception:
+        return None
+
+    d = await db.files.find_one({"_id": oid, "class_id": class_id})
+    if not d:
+        return None
+    d["id"] = str(d.pop("_id"))
+    return d
+
 # ---- Chat History ----
 
 async def save_chat_message(class_id: str, role: str, message: str) -> None:

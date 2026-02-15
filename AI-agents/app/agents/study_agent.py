@@ -21,12 +21,13 @@ Hard Rules:
 
 def generate_study_session(
     class_id: str,
-    topic: str
+    topic: str,
+    filename_filter: Optional[str] = None,
 ) -> StudySessionOutput:
     
     # 1. Retrieve relevant material
     vs = get_vector_store(class_id)
-    chunks = vs.search(topic, top_k=8)
+    chunks = vs.search(topic, top_k=8, filename=filename_filter)
     
     if not chunks:
         return StudySessionOutput(slides=[], knowledge_checks=[])
