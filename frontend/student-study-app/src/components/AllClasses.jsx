@@ -21,9 +21,9 @@ export default function AllClasses() {
     }, []);
 
     return (
-        <div className="px-8 py-10 max-w-6xl mx-auto h-full overflow-y-auto">
+        <div className="px-4 py-6 md:px-8 md:py-10 max-w-6xl mx-auto h-full overflow-y-auto">
             <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">All Classes</h1>
-            <p className="text-slate-500 mb-10">Manage and track your academic progress.</p>
+            <p className="text-slate-500 mb-8 md:mb-10">Manage and track your academic progress.</p>
 
             {err && (
                 <div className="mb-6 rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-800 flex items-center gap-2">
@@ -32,7 +32,7 @@ export default function AllClasses() {
             )}
 
             {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     {[1, 2, 3, 4].map(i => (
                         <div key={i} className="h-40 bg-white rounded-2xl border border-slate-100 shadow-sm animate-pulse" />
                     ))}

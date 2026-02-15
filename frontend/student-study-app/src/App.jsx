@@ -85,53 +85,91 @@ function AuthedApp({ signOut, user }) {
     user?.signInDetails?.loginId || user?.attributes?.email || user?.username;
 
   return (
-    <div className="h-screen bg-slate-50 text-slate-900 font-sans">
-      <div className="flex h-full">
-        <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm">
-          <div className="p-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">S</span>
+    <div className="h-screen bg-slate-50 text-slate-900 font-sans flex flex-col md:flex-row overflow-hidden">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between flex-shrink-0 z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-lg">S</span>
+          </div>
+          <div className="text-lg font-bold leading-none text-slate-900">StudyHub</div>
+        </div>
+        <button onClick={signOut} className="text-sm font-medium text-slate-500 hover:text-slate-900">
+          Sign out
+        </button>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-72 bg-white border-r border-slate-200 flex-col shadow-sm h-full flex-shrink-0 z-20">
+        <div className="p-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-xl">S</span>
+            </div>
+            <div>
+              <div className="text-lg font-bold leading-none">StudyHub</div>
+              <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
+                Student Portal
               </div>
-              <div>
-                <div className="text-lg font-bold leading-none">StudyHub</div>
-                <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">
-                  Student Portal
-                </div>
-                <div className="mt-1 text-[10px] text-slate-400">{email}</div>
-              </div>
+              <div className="mt-1 text-[10px] text-slate-400 truncate max-w-[160px]">{email}</div>
             </div>
           </div>
+        </div>
 
-          <nav className="px-4 space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item}
-                onClick={() => setActiveNav(item)}
-                className={[
-                  "w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition",
-                  activeNav === item
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-slate-700 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                {item}
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-auto p-4">
+        <nav className="px-4 space-y-1">
+          {navItems.map((item) => (
             <button
-              onClick={signOut}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium"
+              key={item}
+              onClick={() => setActiveNav(item)}
+              className={[
+                "w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition",
+                activeNav === item
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-slate-700 hover:bg-slate-50",
+              ].join(" ")}
             >
-              Sign out
+              {item}
             </button>
-          </div>
-        </aside>
+          ))}
+        </nav>
 
-        <main className="flex-1 overflow-auto">{renderContent()}</main>
-      </div>
+        <div className="mt-auto p-4">
+          <button
+            onClick={signOut}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium"
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden h-full relative pb-20 md:pb-0">
+        {renderContent()}
+      </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center p-2 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-area-bottom">
+        {navItems.map((item) => {
+          const icons = {
+            "Dashboard": "📊",
+            "Calendar": "📅",
+            "All Classes": "📚",
+            "Settings": "⚙️"
+          };
+          const isActive = activeNav === item;
+          return (
+            <button
+              key={item}
+              onClick={() => setActiveNav(item)}
+              className={`flex flex-col items-center justify-center p-2 w-full rounded-xl transition-all duration-200 ${isActive ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}
+            >
+              <span className="text-lg mb-0.5 leading-none">{icons[item]}</span>
+              <span className="text-[10px] font-medium leading-none">{item}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
