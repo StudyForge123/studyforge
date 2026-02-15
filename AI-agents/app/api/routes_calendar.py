@@ -50,8 +50,17 @@ async def api_create_class(body: CreateClassRequest):
 async def api_list_classes():
     return {"classes": await list_classes()}
 
-@router.post("/classes/{class_id}/upload/syllabus")
-async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
+from app.ingest.chunking import chunk_text
+from app.ingest.retrieval import get_vector_store
+
+# ...
+
+@router.post("/classes/{class_id}/upload")
+async def api_upload_file(
+    class_id: str, 
+    file_type: str = "material", # syllabus | material | assessment
+    file: UploadFile = File(...)
+):
     cls = await get_class(class_id)
     if not cls:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -60,24 +69,51 @@ async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
     safe_name = file.filename.replace("/", "_").replace("\\", "_")
-    pdf_path = UPLOAD_DIR / f"class_{class_id}__{safe_name}"
+    pdf_path = UPLOAD_DIR / f"class_{class_id}_{file_type}_{safe_name}"
     content = await file.read()
     pdf_path.write_bytes(content)
 
     marked_text = extract_pdf_text_with_markers(pdf_path)
 
-    text_path = TEXT_DIR / f"class_{class_id}__{safe_name}.txt"
+    text_path = TEXT_DIR / f"class_{class_id}_{file_type}_{safe_name}.txt"
     text_path.write_text(marked_text, encoding="utf-8")
+
+    # RAG: Chunk and Index
+    chunks = chunk_text(marked_text, chunk_prefix=f"{file_type}_{safe_name}")
+    chunk_dicts = [
+        {
+            "chunk_id": c.chunk_id,
+            "text": c.text,
+            "page_start": c.page_start,
+            "page_end": c.page_end,
+            "filename": safe_name,
+            "file_type": file_type
+        } for c in chunks
+    ]
+    
+    vs = get_vector_store(class_id)
+    vs.add_chunks(chunk_dicts)
 
     file_id = await insert_file(
         class_id=class_id,
-        file_type="syllabus",
+        file_type=file_type,
         filename=safe_name,
         pdf_path=str(pdf_path),
         extracted_text_path=str(text_path),
     )
 
-    return {"file_id": file_id, "pdf_path": str(pdf_path), "text_path": str(text_path)}
+    return {
+        "file_id": file_id, 
+        "pdf_path": str(pdf_path), 
+        "text_path": str(text_path),
+        "chunks_indexed": len(chunk_dicts)
+    }
+
+# Keep the legacy syllabus upload for backward compatibility with frontend if needed, 
+# or just update the frontend to use the new one.
+@router.post("/classes/{class_id}/upload/syllabus")
+async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
+    return await api_upload_file(class_id, "syllabus", file)
 
 @router.post("/calendar/generate")
 async def api_generate_calendar(body: CalendarGenerateRequest):
@@ -91,7 +127,10 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
         if not cls:
             raise HTTPException(status_code=404, detail=f"Class not found: {cid}")
 
+        # Prefer syllabus, but fall back to any uploaded file
         syllabi = await list_files(cid, file_type="syllabus")
+        if not syllabi:
+            syllabi = await list_files(cid)  # try any file type
         if not syllabi:
             continue
 
@@ -105,7 +144,7 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
         })
 
     if not items:
-        raise HTTPException(status_code=400, detail="No syllabi found for provided classes")
+        raise HTTPException(status_code=400, detail="No files found for the provided classes. Please upload a syllabus or material PDF first.")
 
     out = generate_calendar(items, default_year=body.default_year)
     events = out.model_dump()["events"]
@@ -114,6 +153,14 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
     await save_calendar_events(class_ids_key, events)
     
     return {"events": events}
+
+@router.get("/classes/{class_id}/files")
+async def api_list_files(class_id: str, file_type: str = None):
+    cls = await get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    files = await list_files(class_id, file_type=file_type)
+    return {"files": files}
 
 @router.get("/calendar/events")
 async def api_get_calendar_events(class_ids: str):

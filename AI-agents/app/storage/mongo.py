@@ -88,6 +88,28 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         d["id"] = str(d.pop("_id"))
         out.append(d)
     return out
+
+# ---- Chat History ----
+
+async def save_chat_message(class_id: str, role: str, message: str) -> None:
+    db = get_db()
+    doc = {
+        "class_id": class_id,
+        "role": role,  # user | assistant
+        "message": message,
+        "created_at": __import__("datetime").datetime.utcnow(),
+    }
+    await db.chat_history.insert_one(doc)
+
+async def list_chat_history(class_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    db = get_db()
+    cur = db.chat_history.find({"class_id": class_id}).sort("created_at", 1).limit(limit)
+    out = []
+    async for d in cur:
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    return out
+
 # ---- Calendar Caching ----
 
 async def save_calendar_events(class_ids_key: str, events: List[Dict[str, Any]]) -> None:
