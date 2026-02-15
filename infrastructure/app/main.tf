@@ -23,6 +23,10 @@ data "aws_subnets" "default_vpc_subnets" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
 # Look up the certificate created by the DNS stack
 data "aws_acm_certificate" "site" {
   count       = var.custom_domain_enabled && var.domain_name != "" ? 1 : 0
@@ -34,7 +38,8 @@ data "aws_acm_certificate" "site" {
 locals {
   # Use the certificate_arn from variable if provided (override), 
   # otherwise try to get it from the data source lookup if enabled.
-  certificate_arn = var.certificate_arn != "" ? var.certificate_arn : try(data.aws_acm_certificate.site[0].arn, "")
+  certificate_arn  = var.certificate_arn != "" ? var.certificate_arn : try(data.aws_acm_certificate.site[0].arn, "")
+  worker_image_uri = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/${var.worker_ecr_repository}:${var.worker_image_tag}"
 }
 
 ############################
@@ -93,6 +98,18 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
+  origin {
+    domain_name = aws_instance.api.public_dns
+    origin_id   = "API-${aws_instance.api.id}"
+
+    custom_origin_config {
+      http_port              = 8000
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
@@ -127,6 +144,26 @@ resource "aws_cloudfront_distribution" "site" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "API-${aws_instance.api.id}"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      cookies {
+        forward = "all"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
   }
 
   restrictions {
@@ -202,6 +239,16 @@ resource "aws_iam_role_policy_attachment" "attach_secret_policy" {
   policy_arn = aws_iam_policy.secret_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "attach_ecr_readonly_policy" {
+  role       = aws_iam_role.api_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy_attachment" "attach_ssm_core_policy" {
+  role       = aws_iam_role.api_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "api_profile" {
   name = "studybuddy-api-profile"
   role = aws_iam_role.api_role.name
@@ -261,12 +308,55 @@ resource "aws_instance" "api" {
   iam_instance_profile   = aws_iam_instance_profile.api_profile.name
 
   user_data = <<-EOF
-    #!/bin/bash
-    dnf update -y
-    dnf install -y docker awscli
-    systemctl enable docker
-    systemctl start docker
-  EOF
+#!/bin/bash
+set -euxo pipefail
+
+dnf update -y
+dnf install -y docker awscli python3 amazon-ssm-agent
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
+systemctl enable docker
+systemctl start docker
+
+REGION="${data.aws_region.current.name}"
+REGISTRY="${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com"
+IMAGE_URI="${local.worker_image_uri}"
+OPENAI_SECRET_RAW="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "${var.openai_secret_name}" --query SecretString --output text)"
+MONGO_SECRET_RAW="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "${var.mongo_secret_name}" --query SecretString --output text)"
+
+OPENAI_API_KEY="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print(v.get("OPENAI_API_KEY","") if isinstance(v,dict) else (v if isinstance(v,str) else ""))' "$OPENAI_SECRET_RAW")"
+MONGO_URI="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print((v.get("MONGO_URI") or v.get("uri") or v.get("connection_string") or "") if isinstance(v,dict) else (v if isinstance(v,str) else ""))' "$MONGO_SECRET_RAW")"
+MONGO_DB="$(python3 -c 'import json,sys; v=json.loads(sys.argv[1]); print((v.get("MONGO_DB") or v.get("db") or "studyforge") if isinstance(v,dict) else "studyforge")' "$MONGO_SECRET_RAW")"
+
+if [[ -z "$OPENAI_API_KEY" ]]; then
+  echo "OPENAI_API_KEY missing in secret ${var.openai_secret_name}" >&2
+  exit 1
+fi
+if [[ -z "$MONGO_URI" ]]; then
+  echo "MONGO_URI missing in secret ${var.mongo_secret_name}" >&2
+  exit 1
+fi
+
+mkdir -p /opt/studybuddy
+cat >/opt/studybuddy/worker.env <<ENVVARS
+APP_ENV=prod
+OPENAI_API_KEY=$OPENAI_API_KEY
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_EMBED_MODEL=text-embedding-3-large
+MONGO_URI=$MONGO_URI
+MONGO_DB=$MONGO_DB
+ENVVARS
+chmod 600 /opt/studybuddy/worker.env
+
+aws ecr get-login-password --region "$REGION" \
+  | docker login --username AWS --password-stdin "$REGISTRY"
+docker pull "$IMAGE_URI"
+docker rm -f studybuddy-worker || true
+docker run -d --name studybuddy-worker --restart unless-stopped \
+  --env-file /opt/studybuddy/worker.env \
+  -p 8000:8001 \
+  "$IMAGE_URI"
+EOF
 
   tags = {
     Name = "studybuddy-api"

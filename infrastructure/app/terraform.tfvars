@@ -7,3 +7,6 @@ openai_secret_name    = "studybuddy/openai"
 mongo_secret_name     = "studybuddy/mongodb"
 domain_name           = "studyforge.us"
 custom_domain_enabled = true
+
+worker_ecr_repository = "studybuddy/worker"
+worker_image_tag      = "latest"

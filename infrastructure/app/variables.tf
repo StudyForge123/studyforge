@@ -62,3 +62,13 @@ variable "logout_urls" {
   type    = list(string)
   default = ["http://localhost:3000"]
 }
+
+variable "worker_ecr_repository" {
+  type    = string
+  default = "studybuddy/worker"
+}
+
+variable "worker_image_tag" {
+  type    = string
+  default = "latest"
+}
