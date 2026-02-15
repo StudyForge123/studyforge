@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { api } from "../api/client";
 
 function StatCard({ label, value, color }) {
   return (
@@ -12,14 +13,38 @@ function StatCard({ label, value, color }) {
   );
 }
 
-function ClassCard({ c, onOpen }) {
+function ClassCard({ c, onOpen, onRefresh }) {
   const progress = c.progress ?? 0;
+  const [uploading, setUploading] = useState(false);
+  const [uploadType, setUploadType] = useState("");
+
+  async function handleFileUpload(e, type) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadType(type);
+    try {
+      if (type === "syllabus") {
+        await api.uploadSyllabus(c.id, file);
+      } else if (type === "material") {
+        await api.uploadMaterial(c.id, file);
+      } else if (type === "assessment") {
+        await api.uploadAssessment(c.id, file);
+      }
+      alert(`${type} uploaded successfully!`);
+      onRefresh?.();
+    } catch (err) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading(false);
+      setUploadType("");
+      e.target.value = "";
+    }
+  }
 
   return (
-    <button
-      onClick={() => onOpen?.(c)}
-      className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 group w-full"
-    >
+    <div className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 group w-full">
       <div className="flex justify-between items-start mb-4">
         <div>
           <div className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</div>
@@ -28,6 +53,48 @@ function ClassCard({ c, onOpen }) {
         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
           <span className="text-xl">📚</span>
         </div>
+      </div>
+
+      {/* Upload Buttons */}
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        <label className="relative cursor-pointer">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => handleFileUpload(e, "syllabus")}
+            className="hidden"
+            disabled={uploading}
+          />
+          <div className="text-xs font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 px-2 py-1.5 rounded-lg border border-slate-100 hover:border-indigo-200 transition-all text-center">
+            {uploading && uploadType === "syllabus" ? "..." : "📄 Syllabus"}
+          </div>
+        </label>
+        
+        <label className="relative cursor-pointer">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => handleFileUpload(e, "material")}
+            className="hidden"
+            disabled={uploading}
+          />
+          <div className="text-xs font-medium text-slate-600 hover:text-emerald-600 bg-slate-50 hover:bg-emerald-50 px-2 py-1.5 rounded-lg border border-slate-100 hover:border-emerald-200 transition-all text-center">
+            {uploading && uploadType === "material" ? "..." : "📖 Material"}
+          </div>
+        </label>
+        
+        <label className="relative cursor-pointer">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => handleFileUpload(e, "assessment")}
+            className="hidden"
+            disabled={uploading}
+          />
+          <div className="text-xs font-medium text-slate-600 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 px-2 py-1.5 rounded-lg border border-slate-100 hover:border-amber-200 transition-all text-center">
+            {uploading && uploadType === "assessment" ? "..." : "✍️ Test"}
+          </div>
+        </label>
       </div>
 
       <div className="space-y-4">
@@ -49,7 +116,7 @@ function ClassCard({ c, onOpen }) {
           <span>{c.nextExamDate || "Not scheduled"}</span>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -122,7 +189,7 @@ export default function Dashboard({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {classes.map((c) => (
-              <ClassCard key={c.id || c.name} c={c} onOpen={() => { }} />
+              <ClassCard key={c.id || c.name} c={c} onOpen={() => { }} onRefresh={() => window.location.reload()} />
             ))}
 
             {/* Empty State / Add New Placeholder */}

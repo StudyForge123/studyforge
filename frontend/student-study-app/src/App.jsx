@@ -5,9 +5,11 @@ import { api } from "./api/client";
 import Dashboard from "./components/Dashboard";
 import Calendar from "./components/Calendar";
 import AllClasses from "./components/AllClasses";
+import Quiz from "./components/Quiz";
+import StudySession from "./components/StudySession";
 import Settings from "./components/Settings";
 
-const navItems = ["Dashboard", "Calendar", "All Classes", "Settings"];
+const navItems = ["Dashboard", "Calendar", "Quiz", "Study Session", "All Classes", "Settings"];
 
 export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
@@ -22,6 +24,7 @@ export default function App() {
   const [mode, setMode] = useState("Study Session");
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const [selectedClassForChat, setSelectedClassForChat] = useState("");
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
@@ -57,11 +60,15 @@ export default function App() {
     }
   }
 
-  async function handleGenerateCalendar() {
+  async function handleGenerateCalendar(classIds) {
     setErr("");
     try {
-      await api.generateCalendar();
-      await refresh();
+      const ids = classIds || classes.map(c => c.id);
+      if (ids.length === 0) {
+        setErr("No classes available");
+        return;
+      }
+      await api.generateCalendar({ class_ids: ids });
       setActiveNav("Calendar");
     } catch (e) {
       setErr(e.message || "Generate failed");
@@ -71,10 +78,14 @@ export default function App() {
   async function handleSend() {
     const text = message.trim();
     if (!text) return;
+    if (!selectedClassForChat) {
+      setErr("Please select a class for chat");
+      return;
+    }
     setChatBusy(true);
     setErr("");
     try {
-      await api.chat({ mode, message: text });
+      await api.chat({ class_id: selectedClassForChat, mode, message: text });
       setMessage("");
     } catch (e) {
       setErr(e.message || "Chat failed");
@@ -99,6 +110,10 @@ export default function App() {
         );
       case "Calendar":
         return <Calendar />;
+      case "Quiz":
+        return <Quiz classes={classes} />;
+      case "Study Session":
+        return <StudySession classes={classes} />;
       case "All Classes":
         return <AllClasses />;
       case "Settings":
@@ -174,11 +189,23 @@ export default function App() {
 
           {/* Bottom Chat Bar (Floating) */}
           <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-center pointer-events-none">
-            <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
+            <div className="w-full max-w-4xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
+              <select
+                value={selectedClassForChat}
+                onChange={(e) => setSelectedClassForChat(e.target.value)}
+                className="w-40 bg-slate-50 border-transparent rounded-xl px-3 py-3 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                style={{ backgroundImage: 'none' }}
+              >
+                <option value="">Select Class</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+
               <select
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
-                className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                className="w-40 bg-slate-50 border-transparent rounded-xl px-3 py-3 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
                 style={{ backgroundImage: 'none' }}
               >
                 <option>Study Session</option>
@@ -191,13 +218,14 @@ export default function App() {
               <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                 className="flex-1 bg-transparent px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none text-slate-800"
                 placeholder="Ask your AI assistant..."
               />
 
               <button
                 onClick={handleSend}
-                disabled={chatBusy}
+                disabled={chatBusy || !selectedClassForChat}
                 className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:shadow-none hover:translate-y-[-1px] active:translate-y-[0px]"
               >
                 {chatBusy ? (

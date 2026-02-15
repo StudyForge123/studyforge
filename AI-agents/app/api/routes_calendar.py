@@ -16,7 +16,10 @@ from app.storage.mongo import (
     list_files,
 )
 from app.ingest.pdf_text import extract_pdf_text_with_markers
+from app.ingest.chunking import chunk_text
 from app.agents.calendar_agent import generate_calendar
+from app.storage.vector_store import VectorStore
+from app.storage.embeddings import generate_embeddings
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 
@@ -67,6 +70,9 @@ async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
     text_path = TEXT_DIR / f"class_{class_id}__{safe_name}.txt"
     text_path.write_text(marked_text, encoding="utf-8")
 
+    # Chunk text for indexing
+    chunks = chunk_text(marked_text, chunk_prefix=f"syllabus_{class_id}")
+
     file_id = await insert_file(
         class_id=class_id,
         file_type="syllabus",
@@ -75,7 +81,30 @@ async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
         extracted_text_path=str(text_path),
     )
 
-    return {"file_id": file_id, "pdf_path": str(pdf_path), "text_path": str(text_path)}
+    # Generate embeddings and index
+    if chunks:
+        chunk_texts = [c.text for c in chunks]
+        embeddings = generate_embeddings(chunk_texts)
+        
+        # Load or create vector store
+        vector_store = VectorStore(class_id)
+        vector_store.load()
+        
+        # Add chunks
+        vector_store.add_chunks(
+            chunks=chunks,
+            embeddings=embeddings,
+            file_id=file_id,
+            file_type="syllabus",
+            filename=safe_name
+        )
+
+    return {
+        "file_id": file_id,
+        "pdf_path": str(pdf_path),
+        "text_path": str(text_path),
+        "chunks_indexed": len(chunks)
+    }
 
 @router.post("/calendar/generate")
 async def api_generate_calendar(body: CalendarGenerateRequest):

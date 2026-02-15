@@ -88,3 +88,55 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         d["id"] = str(d.pop("_id"))
         out.append(d)
     return out
+
+async def get_file(file_id: str) -> Optional[Dict[str, Any]]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(file_id)
+    except Exception:
+        return None
+    d = await db.files.find_one({"_id": oid})
+    if not d:
+        return None
+    d["id"] = str(d.pop("_id"))
+    return d
+
+# ---- Chat History ----
+
+async def insert_chat_message(
+    class_id: str,
+    role: str,  # "user" | "assistant"
+    content: str,
+    mode: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    db = get_db()
+    doc = {
+        "class_id": class_id,
+        "role": role,
+        "content": content,
+        "mode": mode,
+        "metadata": metadata or {},
+        "created_at": __import__("datetime").datetime.utcnow(),
+    }
+    res = await db.chat_history.insert_one(doc)
+    return str(res.inserted_id)
+
+async def get_chat_history(
+    class_id: str,
+    limit: int = 50
+) -> List[Dict[str, Any]]:
+    db = get_db()
+    cur = db.chat_history.find({"class_id": class_id}).sort("created_at", -1).limit(limit)
+    out = []
+    async for d in cur:
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    # Reverse to get chronological order
+    return list(reversed(out))
+
+async def clear_chat_history(class_id: str) -> int:
+    db = get_db()
+    result = await db.chat_history.delete_many({"class_id": class_id})
+    return result.deleted_count
