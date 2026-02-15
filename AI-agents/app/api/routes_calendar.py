@@ -71,13 +71,13 @@ async def api_upload_syllabus(class_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
     safe_name = file.filename.replace("/", "_").replace("\\", "_")
-    pdf_path = UPLOAD_DIR / f"class_{class_id}__{safe_name}"
+    pdf_path = (UPLOAD_DIR / f"class_{class_id}__{safe_name}").resolve()
     content = await file.read()
     pdf_path.write_bytes(content)
 
     marked_text = extract_pdf_text_with_markers(pdf_path)
 
-    text_path = TEXT_DIR / f"class_{class_id}__{safe_name}.txt"
+    text_path = (TEXT_DIR / f"class_{class_id}__{safe_name}.txt").resolve()
     text_path.write_text(marked_text, encoding="utf-8")
 
     file_id = await insert_file(
@@ -99,11 +99,11 @@ async def api_upload_material(class_id: str, file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
     safe_name = file.filename.replace("/", "_").replace("\\", "_")
-    pdf_path = UPLOAD_DIR / f"class_{class_id}__material_{safe_name}"
+    pdf_path = (UPLOAD_DIR / f"class_{class_id}__material_{safe_name}").resolve()
     content = await file.read()
     pdf_path.write_bytes(content)
     marked_text = extract_pdf_text_with_markers(pdf_path)
-    text_path = TEXT_DIR / f"class_{class_id}__material_{safe_name}.txt"
+    text_path = (TEXT_DIR / f"class_{class_id}__material_{safe_name}.txt").resolve()
     text_path.write_text(marked_text, encoding="utf-8")
     file_id = await insert_file(
         class_id=class_id,
@@ -124,11 +124,11 @@ async def api_upload_assessment(class_id: str, file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
     safe_name = file.filename.replace("/", "_").replace("\\", "_")
-    pdf_path = UPLOAD_DIR / f"class_{class_id}__assessment_{safe_name}"
+    pdf_path = (UPLOAD_DIR / f"class_{class_id}__assessment_{safe_name}").resolve()
     content = await file.read()
     pdf_path.write_bytes(content)
     marked_text = extract_pdf_text_with_markers(pdf_path)
-    text_path = TEXT_DIR / f"class_{class_id}__assessment_{safe_name}.txt"
+    text_path = (TEXT_DIR / f"class_{class_id}__assessment_{safe_name}.txt").resolve()
     text_path.write_text(marked_text, encoding="utf-8")
     file_id = await insert_file(
         class_id=class_id,
@@ -162,7 +162,13 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
             continue
 
         s = syllabi[0]  # most recent
-        text = Path(s["extracted_text_path"]).read_text(encoding="utf-8", errors="ignore")
+        text_path = Path(s["extracted_text_path"])
+        if not text_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Syllabus text file not found for class {cid}. Re-upload the syllabus.",
+            )
+        text = text_path.read_text(encoding="utf-8", errors="ignore")
 
         items.append({
             "course": cls["name"],

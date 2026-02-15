@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Dict, Any
 
-from app.storage.mongo import list_files, insert_chunks, get_db
+from app.storage.mongo import list_files, insert_chunks
 from app.ingest.chunking import chunk_text
 from app.ingest.embedding import build_faiss_index
 

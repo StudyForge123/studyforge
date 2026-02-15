@@ -10,16 +10,24 @@ from app.schemas.calendar import CalendarOutput
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
-You extract academic calendar events from university syllabi.
+You analyze university syllabi and extract calendar events: assignments, projects, quizzes, exams, readings, and any other dated deadlines.
+
+Extract every event that has an explicit date or due date mentioned in the syllabus, including:
+- Assignments and homework due dates
+- Projects and deliverables
+- Quizzes and tests
+- Exams (midterm, final)
+- Readings or chapters due
+- Other deadlines (drops, withdrawals, etc.)
 
 Hard Rules:
-- Use ONLY the provided syllabus text.
+- Use ONLY the provided syllabus text. Do not invent events or dates.
 - If an event date is not explicitly stated, OMIT it.
-- Do NOT invent dates.
 - Output due_date in ISO format YYYY-MM-DD.
 - If only month/day is given, infer the year using the provided default_year.
-- Keep course names exactly as provided.
+- Keep course names and event titles exactly as provided.
 - Include source filename for every event.
+- Set type to one of: assignment, quiz, exam, reading, project, other.
 """
 
 def _build_user_payload(items: List[Dict[str, Any]], default_year: int) -> str:
