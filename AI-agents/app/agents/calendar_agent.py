@@ -1,81 +1,103 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any
-import re
-from openai import OpenAI
-
-from app import config
-from app.schemas.calendar import CalendarOutput, CalendarEvent
-
-# Initialize OpenAI client
-client = OpenAI(api_key=config.OPENAI_API_KEY)
-
-SYSTEM_PROMPT = """
-You extract academic calendar events from university syllabi.
-Include exams, quizzes, assignments, projects, administrative dates, AND recurring events (Class Time, Office Hours).
-If there is a weekly schedule table, you MUST read each row and include important dated items from it.
-
-Hard Rules:
-1. Use ONLY the provided syllabus text.
-2. Recurring Events (Class Time, Office Hours):
-   - Instead of listing every instance, extract a TEMPLATE.
-   - Set 'recurrence' to "MWF", "TTh", "MW", "MTWThF", etc.
-   - Set 'semester' to "Fall", "Spring", or "Summer" (Identify from text).
-   - Set 'duration_weeks' to the semester length (default to 15 if unknown).
-   - Leave 'due_date' empty for these templates.
-3. Specific Dates (Exams, etc.):
-   - Set 'due_date' in YYYY-MM-DD.
-   - Set 'semester' as identified.
-   - Leave 'recurrence' empty.
-4. Handling "Week N":
-   - Identify Semester (Fall/Spring/Summer). Fall: Start Aug 25. Spring: Start Jan 15. Summer: Start May 15.
-   - Calculate: Start Date + (N-1) weeks. Use this as due_date.
-5. Time Extraction:
-   - Extract start_time and end_time (HH:MM).
-6. Weekly schedule tables:
-   - If a table has rows like "Week of 08/23", treat those as anchor dates.
-   - Include major deadlines (exams, final, major assignments, quizzes).
-   - If the syllabus states recurring due rules (e.g., "Homework due Sundays 11:59pm", "Quiz due Mondays 10:30am"),
-     emit recurring template events so they can be expanded into concrete due dates.
-"""
-
-def _build_user_payload(items: List[Dict[str, Any]], default_year: int) -> str:
-    """
-    items = [
-        {
-            "course": str,
-            "filename": str,
-            "text": str
-        }
-    ]
-    """
-    parts = [f"default_year: {default_year}\n"]
-    for item in items:
-        parts.append(
-            f"\n=== COURSE: {item['course']} | FILE: {item['filename']} ===\n"
-        )
-        parts.append(item["text"])
-        parts.append("\n")
-    return "".join(parts)
-
 from datetime import datetime, timedelta
+import re
+from typing import Any, Dict, List
 
+from app.schemas.calendar import CalendarEvent, CalendarOutput
+
+# Lines with these keywords are treated as non-event dates that should block events.
+HOLIDAY_OR_NO_CLASS_TERMS = (
+    "holiday",
+    "no class",
+    "no classes",
+    "class cancelled",
+    "class canceled",
+    "campus closed",
+    "university closed",
+    "break",
+    "recess",
+    "spring break",
+    "fall break",
+    "winter break",
+    "thanksgiving",
+    "labor day",
+    "memorial day",
+    "independence day",
+    "mlk",
+)
+
+# Event-oriented terms used when parsing table rows where date and event are split.
+EVENT_SIGNAL_TERMS = (
+    "deadline",
+    "due",
+    "assignment",
+    "homework",
+    "project",
+    "quiz",
+    "exam",
+    "midterm",
+    "final",
+    "reading",
+    "drop",
+    "withdraw",
+    "office hour",
+    "office hours",
+    "class",
+    "lecture",
+    "lab",
+    "discussion",
+    "paper",
+    "presentation",
+)
+
+
+# ---------------------------
+# Normalization + Date/Time
+# ---------------------------
 def _normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
-def _infer_event_type(title: str) -> str:
-    t = (title or "").lower()
-    if any(k in t for k in ["midterm", "final", "exam", "test"]):
-        return "exam"
-    if "quiz" in t:
-        return "quiz"
-    if "reading" in t:
-        return "reading"
-    if any(k in t for k in ["homework", "assignment", "due", "deadline"]):
-        return "assignment"
-    if "project" in t:
-        return "project"
-    return "other"
+
+def _normalize_year(raw_year: str | None, default_year: int) -> int:
+    if not raw_year:
+        return default_year
+    y = int(raw_year)
+    if len(raw_year) == 2:
+        return 2000 + y
+    return y
+
+
+def _month_name_to_int(raw: str) -> int | None:
+    cleaned = raw.replace(".", "").strip().lower()
+    month_map = {
+        "jan": 1,
+        "january": 1,
+        "feb": 2,
+        "february": 2,
+        "mar": 3,
+        "march": 3,
+        "apr": 4,
+        "april": 4,
+        "may": 5,
+        "jun": 6,
+        "june": 6,
+        "jul": 7,
+        "july": 7,
+        "aug": 8,
+        "august": 8,
+        "sep": 9,
+        "sept": 9,
+        "september": 9,
+        "oct": 10,
+        "october": 10,
+        "nov": 11,
+        "november": 11,
+        "dec": 12,
+        "december": 12,
+    }
+    return month_map.get(cleaned)
+
 
 def _to_hhmm(hour: int, minute: int, suffix: str | None) -> str:
     h = hour
@@ -87,224 +109,293 @@ def _to_hhmm(hour: int, minute: int, suffix: str | None) -> str:
             h += 12
     return f"{h:02d}:{minute:02d}"
 
+
 def _extract_time_range(line: str) -> tuple[str | None, str | None]:
+    # 1pm-2:15pm, 1:00 pm to 2:00 pm, 13:00-14:15
     rng = re.search(
-        r"(\d{1,2}):(\d{2})\s*(am|pm)?\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})\s*(am|pm)?",
+        r"(?P<sh>\d{1,2})(?::(?P<sm>\d{2}))?\s*(?P<ss>am|pm)?\s*(?:-|–|—|to)\s*(?P<eh>\d{1,2})(?::(?P<em>\d{2}))?\s*(?P<es>am|pm)?",
         line,
         flags=re.IGNORECASE,
     )
     if rng:
-        start = _to_hhmm(int(rng.group(1)), int(rng.group(2)), rng.group(3))
-        end = _to_hhmm(int(rng.group(4)), int(rng.group(5)), rng.group(6))
-        return start, end
-    single = re.search(r"\b(\d{1,2}):(\d{2})\s*(am|pm)\b", line, flags=re.IGNORECASE)
+        sh = int(rng.group("sh"))
+        sm = int(rng.group("sm") or "0")
+        eh = int(rng.group("eh"))
+        em = int(rng.group("em") or "0")
+        ss = rng.group("ss")
+        es = rng.group("es")
+        if not ss and es:
+            ss = es
+        if not es and ss:
+            es = ss
+        return _to_hhmm(sh, sm, ss), _to_hhmm(eh, em, es)
+
+    # 1pm / 1:30pm
+    single = re.search(
+        r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<s>am|pm)\b",
+        line,
+        flags=re.IGNORECASE,
+    )
     if single:
-        return _to_hhmm(int(single.group(1)), int(single.group(2)), single.group(3)), None
+        return _to_hhmm(int(single.group("h")), int(single.group("m") or "0"), single.group("s")), None
+
+    # 24h single time
+    military = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", line)
+    if military:
+        return f"{int(military.group(1)):02d}:{int(military.group(2)):02d}", None
+
     return None, None
 
-def _line_dates(line: str, default_year: int) -> List[datetime]:
-    dates: List[datetime] = []
-    for m in re.finditer(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b", line):
-        mm = int(m.group(1))
-        dd = int(m.group(2))
-        yy = m.group(3)
-        year = default_year if yy is None else int(yy) + 2000 if len(yy) == 2 else int(yy)
-        try:
-            dates.append(datetime(year, mm, dd))
-        except ValueError:
-            continue
 
-    month_re = r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
-    for m in re.finditer(rf"\b{month_re}\s+(\d{{1,2}})(?:,\s*(\d{{4}}))?\b", line, flags=re.IGNORECASE):
-        month_name = m.group(1)
-        day = int(m.group(2))
-        year = int(m.group(3)) if m.group(3) else default_year
+def _line_dates(line: str, default_year: int) -> List[datetime]:
+    line = _normalize_whitespace(line)
+    if not line:
+        return []
+
+    dates: List[datetime] = []
+    seen = set()
+
+    def _push(year: int, month: int, day: int) -> None:
         try:
-            parsed = datetime.strptime(f"{month_name} {day} {year}", "%B %d %Y")
+            parsed = datetime(year, month, day)
         except ValueError:
-            try:
-                parsed = datetime.strptime(f"{month_name} {day} {year}", "%b %d %Y")
-            except ValueError:
-                continue
+            return
+        key = parsed.date().isoformat()
+        if key in seen:
+            return
+        seen.add(key)
         dates.append(parsed)
+
+    # MM/DD[/YY]
+    for m in re.finditer(r"\b(0?[1-9]|1[0-2])[/-](0?[1-9]|[12][0-9]|3[01])(?:[/-](\d{2,4}))?\b", line):
+        month = int(m.group(1))
+        day = int(m.group(2))
+        year = _normalize_year(m.group(3), default_year)
+        _push(year, month, day)
+
+    # Month DD[, YYYY]
+    month_re = r"(jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:t)?(?:ember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)"
+    for m in re.finditer(rf"\b{month_re}\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,\s*(\d{{2,4}}))?\b", line, flags=re.IGNORECASE):
+        month = _month_name_to_int(m.group(1))
+        if month is None:
+            continue
+        day = int(m.group(2))
+        year = _normalize_year(m.group(3), default_year)
+        _push(year, month, day)
+
+    # DD Month [YYYY]
+    for m in re.finditer(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{month_re}(?:,\s*(\d{{2,4}}))?\b", line, flags=re.IGNORECASE):
+        day = int(m.group(1))
+        month = _month_name_to_int(m.group(2))
+        if month is None:
+            continue
+        year = _normalize_year(m.group(3), default_year)
+        _push(year, month, day)
+
     return dates
 
-def _extract_table_events(items: List[Dict[str, Any]], default_year: int) -> List[Dict[str, Any]]:
-    supplemental: List[Dict[str, Any]] = []
-    week_date_re = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\b", re.MULTILINE)
 
-    for item in items:
-        text = item.get("text", "")
-        if not text:
-            continue
+# ---------------------------
+# Event Inference (strict)
+# ---------------------------
+def _infer_event_type(title: str) -> str:
+    lower = (title or "").lower()
+    if any(k in lower for k in ("midterm", "final", "exam", "test")):
+        return "exam"
+    if "quiz" in lower:
+        return "quiz"
+    if "reading" in lower:
+        return "reading"
+    if "project" in lower:
+        return "project"
+    if any(k in lower for k in ("assignment", "homework", "deadline", "due", "drop", "withdraw")):
+        return "assignment"
+    return "other"
 
-        weeks = []
-        for m in week_date_re.finditer(text):
-            month = int(m.group(1))
-            day = int(m.group(2))
-            try:
-                weeks.append(datetime(default_year, month, day))
-            except ValueError:
-                continue
-        weeks = sorted({w.date(): w for w in weeks}.values(), key=lambda d: d.date())
 
-        lower = text.lower()
-        has_weekly_hw = "homework" in lower and "sunday" in lower and "11:59" in lower
-        has_weekly_quiz = ("pre-lecture" in lower or "pre lecture" in lower) and "monday" in lower and "10:30" in lower
+def _is_holiday_or_no_class_line(line: str) -> bool:
+    lower = (line or "").lower()
+    return any(term in lower for term in HOLIDAY_OR_NO_CLASS_TERMS)
 
-        if has_weekly_hw:
-            for wk in weeks:
-                due = wk + timedelta(days=6)
-                supplemental.append({
-                    "title": "Homework Due",
-                    "course": item.get("course", "Course"),
-                    "type": "assignment",
-                    "due_date": due.strftime("%Y-%m-%d"),
-                    "start_time": "23:59",
-                    "end_time": None,
-                    "recurrence": None,
-                    "semester": None,
-                    "duration_weeks": None,
-                    "timezone": "America/New_York",
-                    "source": {"filename": item.get("filename", "syllabus"), "page_hint": "schedule"},
-                })
 
-        if has_weekly_quiz:
-            for wk in weeks:
-                supplemental.append({
-                    "title": "Pre-Lecture Quiz Due",
-                    "course": item.get("course", "Course"),
-                    "type": "quiz",
-                    "due_date": wk.strftime("%Y-%m-%d"),
-                    "start_time": "10:30",
-                    "end_time": None,
-                    "recurrence": None,
-                    "semester": None,
-                    "duration_weeks": None,
-                    "timezone": "America/New_York",
-                    "source": {"filename": item.get("filename", "syllabus"), "page_hint": "schedule"},
-                })
+def _line_has_event_signal(line: str) -> bool:
+    lower = (line or "").lower()
+    return any(term in lower for term in EVENT_SIGNAL_TERMS)
 
-        # Capture any line with a date (table and non-table), with inferred event type.
-        lines = text.splitlines()
-        for ln in lines:
-            line = _normalize_whitespace(ln)
-            if not line:
-                continue
-            if line.lower().startswith("week of"):
-                continue
-            if len(line) < 6:
-                continue
-            dates = _line_dates(line, default_year)
-            if not dates:
-                continue
-            start_time, end_time = _extract_time_range(line)
-            # Prefer line text without leading date token for table rows.
-            body = re.sub(r"^\s*\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\s*", "", line).strip()
-            title = body if body else line
-            if len(title) < 3:
-                title = "Scheduled Course Event"
-            event_type = _infer_event_type(title)
 
-            for dt in dates:
-                supplemental.append({
-                    "title": title[:180],
-                    "course": item.get("course", "Course"),
-                    "type": event_type,
-                    "due_date": dt.strftime("%Y-%m-%d"),
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "recurrence": None,
-                    "semester": None,
-                    "duration_weeks": None,
-                    "timezone": "America/New_York",
-                    "source": {"filename": item.get("filename", "syllabus"), "page_hint": "schedule"},
-                })
+def _strip_leading_date_tokens(line: str) -> str:
+    cleaned = line
+    for _ in range(3):
+        prev = cleaned
+        cleaned = re.sub(r"^\s*(?:week\s+of\s+|week\s+\d+\s*[:.-]?\s*)", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^\s*(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12][0-9]|3[01])(?:[/-]\d{2,4})?\s*[:|,\-–—]?\s*", "", cleaned)
+        cleaned = re.sub(
+            r"^\s*(?:jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:t)?(?:ember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{2,4})?\s*[:|,\-–—]?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        if cleaned == prev:
+            break
+    return _normalize_whitespace(cleaned)
 
-    return supplemental
 
-def _expand_events(templates: List[Any], default_year: int) -> List[Any]:
-    expanded = []
-    for t in templates:
-        if not t.recurrence:
-            expanded.append(t)
-            continue
-        
-        # Determine start date based on semester
-        sem = (t.semester or "Fall").capitalize()
-        if "Fall" in sem:
-            month, day = 8, 25
-        elif "Spring" in sem:
-            month, day = 1, 15
-        elif "Summer" in sem:
-            month, day = 5, 15
-        else:
-            month, day = 8, 25
+def _looks_like_anchor_line(line: str, stripped: str) -> bool:
+    lower = line.lower()
+    if "week of" in lower or lower.startswith("week "):
+        return True
+    if "|" in line or "\t" in line:
+        return True
+    # Date-only or date-list rows often represent table anchors.
+    if not stripped or len(stripped) < 4:
+        return True
+    return bool(re.fullmatch(r"(?:\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\s*(?:[-–—,/]\s*)?)+", line.strip()))
 
-        start_date = datetime(default_year, month, day)
-        
-        day_map = {"M": 0, "T": 1, "W": 2, "Th": 3, "F": 4, "S": 5, "Su": 6}
-        active_days = []
-        
-        # Parse recurrence pattern safely
-        pattern = t.recurrence
-        if "MTWThF" in pattern: active_days = [0, 1, 2, 3, 4]
-        elif "MTWTh" in pattern: active_days = [0, 1, 2, 3]
-        elif "MWF" in pattern: active_days = [0, 2, 4]
-        elif "TTh" in pattern: active_days = [1, 3]
-        elif "MW" in pattern: active_days = [0, 2]
-        else:
-            # Advanced parsing for things like "MTW"
-            import re
-            tokens = re.findall(r"(Th|Su|[MTWFS])", pattern)
-            for tok in tokens:
-                if tok in day_map:
-                    active_days.append(day_map[tok])
 
-        duration = t.duration_weeks or 15
-        for week in range(duration):
-            for day_offset in active_days:
-                current = start_date + timedelta(weeks=week)
-                days_ahead = day_offset - current.weekday()
-                if days_ahead < 0: days_ahead += 7
-                event_date = current + timedelta(days=days_ahead)
-                
-                new_event = t.model_copy()
-                new_event.due_date = event_date.strftime("%Y-%m-%d")
-                new_event.recurrence = None
-                expanded.append(new_event)
+def _expand_holiday_date_range(line: str, dates: List[datetime]) -> List[datetime]:
+    # For lines like "Spring Break: Mar 11 - Mar 15", block all dates in range.
+    if len(dates) < 2:
+        return dates
+    lower = line.lower()
+    if not any(k in lower for k in ("-", "to", "through", "thru")):
+        return dates
+
+    start = min(dates)
+    end = max(dates)
+    delta_days = (end.date() - start.date()).days
+    if delta_days <= 1 or delta_days > 45:
+        return dates
+
+    expanded = [start + timedelta(days=i) for i in range(delta_days + 1)]
     return expanded
 
-def generate_calendar(
-    items: List[Dict[str, Any]],
-    default_year: int
-) -> CalendarOutput:
+
+def _build_event(
+    item: Dict[str, Any],
+    title: str,
+    due_date: datetime,
+    start_time: str | None,
+    end_time: str | None,
+    page_hint: str,
+) -> Dict[str, Any]:
+    # Required behavior: if no time is provided, use 11:59 PM.
+    event_start = start_time or "23:59"
+    return {
+        "title": (title or "Course Event")[:180],
+        "course": item.get("course", "Course"),
+        "type": _infer_event_type(title),
+        "due_date": due_date.strftime("%Y-%m-%d"),
+        "start_time": event_start,
+        "end_time": end_time,
+        "recurrence": None,
+        "semester": None,
+        "duration_weeks": None,
+        "timezone": "America/New_York",
+        "source": {"filename": item.get("filename", "syllabus"), "page_hint": page_hint},
+    }
+
+
+def _extract_events_from_item(item: Dict[str, Any], default_year: int) -> List[Dict[str, Any]]:
+    text = item.get("text", "")
+    if not text:
+        return []
+
+    events: List[Dict[str, Any]] = []
+    excluded_dates: set[str] = set()
+
+    # Anchor support for table-like extraction where date is one row and event text appears below.
+    anchor_dates: List[datetime] = []
+    anchor_ttl = 0
+
+    for raw_line in text.splitlines():
+        line = _normalize_whitespace(raw_line)
+        if not line:
+            anchor_dates = []
+            anchor_ttl = 0
+            continue
+        if line.startswith("=== Page"):
+            continue
+
+        dates = _line_dates(line, default_year)
+        blocked = _is_holiday_or_no_class_line(line)
+
+        if dates:
+            if blocked:
+                for d in _expand_holiday_date_range(line, dates):
+                    excluded_dates.add(d.strftime("%Y-%m-%d"))
+                anchor_dates = []
+                anchor_ttl = 0
+                continue
+
+            start_time, end_time = _extract_time_range(line)
+            stripped = _strip_leading_date_tokens(line)
+
+            # Date row with little/no body: keep as anchor for following table lines.
+            if _looks_like_anchor_line(line, stripped):
+                anchor_dates = dates
+                anchor_ttl = 7
+                continue
+
+            title = stripped or "Course Event"
+            for dt in dates:
+                events.append(_build_event(item, title, dt, start_time, end_time, "dated-line"))
+
+            # Allow following lines to reuse this date when text is split across lines.
+            anchor_dates = dates
+            anchor_ttl = 4
+            continue
+
+        # No date in current line: only use anchor dates if line looks like event content.
+        if anchor_dates and anchor_ttl > 0:
+            if blocked:
+                for d in anchor_dates:
+                    excluded_dates.add(d.strftime("%Y-%m-%d"))
+                anchor_dates = []
+                anchor_ttl = 0
+                continue
+
+            if _line_has_event_signal(line):
+                start_time, end_time = _extract_time_range(line)
+                title = _strip_leading_date_tokens(line) or "Course Event"
+                for dt in anchor_dates:
+                    events.append(_build_event(item, title, dt, start_time, end_time, "table-anchor"))
+
+            anchor_ttl -= 1
+            if anchor_ttl <= 0:
+                anchor_dates = []
+
+    # Final filtering: remove events that fall on blocked dates or are themselves no-class markers.
+    filtered = []
+    for ev in events:
+        ev_date = (ev.get("due_date") or "").strip()
+        title = (ev.get("title") or "").lower()
+        if not ev_date:
+            continue
+        if ev_date in excluded_dates:
+            continue
+        if _is_holiday_or_no_class_line(title):
+            continue
+        filtered.append(ev)
+
+    return filtered
+
+
+def generate_calendar(items: List[Dict[str, Any]], default_year: int) -> CalendarOutput:
     """
-    Generate structured calendar events from one or more syllabi.
+    Build calendar events strictly from explicit syllabus dates.
+
+    Rules enforced:
+    - Only explicit dated information is converted to calendar events.
+    - Missing time defaults to 23:59.
+    - Holiday/no-class dates are excluded.
+    - No recurrence inference or weekly assumptions.
     """
+    merged: List[Dict[str, Any]] = []
+    for item in items:
+        merged.extend(_extract_events_from_item(item, default_year))
 
-    user_content = _build_user_payload(items, default_year)
-
-    response = client.responses.parse(
-        model=config.OPENAI_MODEL,
-        input=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        text_format=CalendarOutput,  # Enforce structured Pydantic output
-    )
-
-    # Parsed structured templates
-    parsed = response.output_parsed
-    
-    # Expand recurring templates into individual events
-    expanded_events = _expand_events(parsed.events, default_year)
-    supplemental = _extract_table_events(items, default_year)
-    
-    # Merge deterministic supplemental schedule extraction and de-duplicate.
-    merged = [e.model_dump() if hasattr(e, "model_dump") else e for e in expanded_events]
-    merged.extend(supplemental)
-    dedup = {}
+    # Keep multiple events on same date; only remove exact duplicates.
+    dedup: Dict[tuple, Dict[str, Any]] = {}
     for ev in merged:
         key = (
             (ev.get("course") or "").strip().lower(),
@@ -312,10 +403,24 @@ def generate_calendar(
             (ev.get("type") or "").strip().lower(),
             (ev.get("due_date") or "").strip(),
             (ev.get("start_time") or "").strip(),
+            (ev.get("end_time") or "").strip(),
         )
         dedup[key] = ev
 
-    parsed.events = [CalendarEvent.model_validate(e) for e in dedup.values()]
-    for e in parsed.events:
+    events = [CalendarEvent.model_validate(e) for e in dedup.values()]
+    events.sort(
+        key=lambda e: (
+            e.due_date or "9999-12-31",
+            e.start_time or "99:99",
+            (e.course or "").lower(),
+            (e.title or "").lower(),
+        )
+    )
+
+    for e in events:
         e.timezone = "America/New_York"
-    return parsed
+        e.recurrence = None
+        e.semester = None
+        e.duration_weeks = None
+
+    return CalendarOutput(events=events)

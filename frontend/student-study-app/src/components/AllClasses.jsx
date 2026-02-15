@@ -159,6 +159,9 @@ export default function AllClasses({ onDataChange }) {
                                         <p className="text-slate-400 text-sm mt-0.5">
                                             Created {c.created_at ? new Date(c.created_at).toLocaleDateString() : "recently"}
                                         </p>
+                                        {c.semester_label && (
+                                            <p className="text-xs text-slate-400 mt-0.5">Semester: {c.semester_label}</p>
+                                        )}
                                     </div>
                                 </div>
 

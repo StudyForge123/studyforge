@@ -107,7 +107,7 @@ export default function Calendar() {
     }
 
     return (
-        <div className="px-4 sm:px-6 md:px-8 py-6 md:py-10 h-full overflow-y-auto max-w-7xl mx-auto">
+        <div className="px-4 sm:px-6 md:px-8 py-6 md:py-10 h-full overflow-y-auto overflow-x-hidden max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Study Calendar</h1>
@@ -160,67 +160,71 @@ export default function Calendar() {
                 </div>
             ) : (
                 <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-                    {/* Days Header */}
-                    <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/50">
-                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                            <div key={d} className="py-4 text-center text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                {d}
+                    <div className="overflow-x-auto">
+                        <div className="min-w-[700px]">
+                            {/* Days Header */}
+                            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/50">
+                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                                    <div key={d} className="py-3 sm:py-4 text-center text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                        {d}
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
 
-                    <div className="grid grid-cols-7">
-                        {blanks.map((index) => (
-                            <div key={`blank-${index}`} className="min-h-[140px] bg-slate-50/30 border-b border-r border-slate-100/50 last:border-r-0" />
-                        ))}
+                            <div className="grid grid-cols-7">
+                                {blanks.map((index) => (
+                                    <div key={`blank-${index}`} className="min-h-[110px] sm:min-h-[140px] bg-slate-50/30 border-b border-r border-slate-100/50 last:border-r-0" />
+                                ))}
 
-                        {days.map((day) => {
-                            const dateStr = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                            const dayEvents = events.filter(e => (e.due_date || e.date) === dateStr || (e.due_date || e.date)?.startsWith(dateStr));
-                            const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+                                {days.map((day) => {
+                                    const dateStr = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                    const dayEvents = events.filter(e => (e.due_date || e.date) === dateStr || (e.due_date || e.date)?.startsWith(dateStr));
+                                    const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
 
-                            return (
-                                <button
-                                    type="button"
-                                    key={day}
-                                    onClick={() => openDayEvents(dateStr, dayEvents)}
-                                    className={`min-h-[140px] p-3 border-b border-r border-slate-100/50 hover:bg-slate-50 transition-colors relative group text-left ${day % 7 === 0 ? 'border-r-0' : ''} ${dayEvents.length ? 'cursor-pointer' : 'cursor-default'}`}
-                                >
-                                    <div className={`text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full mb-2 transition-all ${isToday ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 scale-110' : 'text-slate-500 group-hover:bg-white group-hover:shadow-sm'}`}>
-                                        {day}
-                                    </div>
-
-                                    <div className="space-y-1.5 overflow-y-auto max-h-[90px] custom-scrollbar">
-                                        {dayEvents.map((ev, i) => (
-                                            <div
-                                                key={i}
-                                                className={`text-[10px] px-2.5 py-1.5 rounded-lg font-semibold border transition-all cursor-default flex flex-col gap-0.5 group/event ${
-                                                    isImportantDeadline(ev)
-                                                        ? "bg-red-50/90 hover:bg-red-100 text-red-700 border-red-100/80"
-                                                        : "bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 border-indigo-100/50"
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-1.5">
-                                                    <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                                                        isImportantDeadline(ev)
-                                                            ? "bg-red-400 group-hover/event:bg-red-600"
-                                                            : "bg-indigo-400 group-hover/event:bg-indigo-600"
-                                                    }`} />
-                                                    <span className="truncate">{ev.title || ev.name}</span>
-                                                </div>
-                                                {(ev.start_time || ev.end_time) && (
-                                                    <div className={`text-[9px] pl-3 font-medium ${
-                                                        isImportantDeadline(ev) ? "text-red-400" : "text-indigo-400"
-                                                    }`}>
-                                                        {formatTime12(ev.start_time) || ""} {ev.end_time ? ` - ${formatTime12(ev.end_time)}` : ""}
-                                                    </div>
-                                                )}
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={day}
+                                            onClick={() => openDayEvents(dateStr, dayEvents)}
+                                            className={`min-h-[110px] sm:min-h-[140px] p-2.5 sm:p-3 border-b border-r border-slate-100/50 hover:bg-slate-50 transition-colors relative group text-left ${day % 7 === 0 ? 'border-r-0' : ''} ${dayEvents.length ? 'cursor-pointer' : 'cursor-default'}`}
+                                        >
+                                            <div className={`text-xs font-bold w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full mb-2 transition-all ${isToday ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 scale-110' : 'text-slate-500 group-hover:bg-white group-hover:shadow-sm'}`}>
+                                                {day}
                                             </div>
-                                        ))}
-                                    </div>
-                                </button>
-                            );
-                        })}
+
+                                            <div className="space-y-1.5 overflow-y-auto max-h-[70px] sm:max-h-[90px] custom-scrollbar">
+                                                {dayEvents.map((ev, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className={`text-[10px] px-2 py-1.5 rounded-lg font-semibold border transition-all cursor-default flex flex-col gap-0.5 group/event ${
+                                                            isImportantDeadline(ev)
+                                                                ? "bg-red-50/90 hover:bg-red-100 text-red-700 border-red-100/80"
+                                                                : "bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 border-indigo-100/50"
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                                                                isImportantDeadline(ev)
+                                                                    ? "bg-red-400 group-hover/event:bg-red-600"
+                                                                    : "bg-indigo-400 group-hover/event:bg-indigo-600"
+                                                            }`} />
+                                                            <span className="truncate">{ev.title || ev.name}</span>
+                                                        </div>
+                                                        {(ev.start_time || ev.end_time) && (
+                                                            <div className={`text-[9px] pl-3 font-medium ${
+                                                                isImportantDeadline(ev) ? "text-red-400" : "text-indigo-400"
+                                                            }`}>
+                                                                {formatTime12(ev.start_time) || ""} {ev.end_time ? ` - ${formatTime12(ev.end_time)}` : ""}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

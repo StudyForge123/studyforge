@@ -25,6 +25,9 @@ function ClassCard({ c, onOpen, onUploadSyllabus }) {
         <div>
           <div className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</div>
           <div className="text-sm text-slate-500 font-medium">{c.professor || "No Professor"}</div>
+          {c.semester_label && (
+            <div className="text-xs text-slate-400 mt-0.5">Semester: {c.semester_label}</div>
+          )}
         </div>
         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
           <span className="text-xl">📚</span>

@@ -27,15 +27,21 @@ async def init_mongo() -> None:
 
 # ---- Classes ----
 
-async def create_class(name: str) -> str:
+async def create_class(name: str, professor: str | None = None, semester_label: str | None = None) -> str:
     db = get_db()
-    doc = {"name": name, "created_at": __import__("datetime").datetime.utcnow()}
+    doc = {
+        "name": name,
+        "professor": (professor or "").strip() or None,
+        # Semester is metadata only and is not used by calendar generation.
+        "semester_label": (semester_label or "").strip() or None,
+        "created_at": __import__("datetime").datetime.utcnow(),
+    }
     res = await db.classes.insert_one(doc)
     return str(res.inserted_id)
 
 async def list_classes() -> List[Dict[str, Any]]:
     db = get_db()
-    cur = db.classes.find({}, {"name": 1, "created_at": 1}).sort("created_at", -1)
+    cur = db.classes.find({}, {"name": 1, "professor": 1, "semester_label": 1, "created_at": 1}).sort("created_at", -1)
     out = []
     async for d in cur:
         d["id"] = str(d.pop("_id"))

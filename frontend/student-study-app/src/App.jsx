@@ -15,7 +15,8 @@ export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
+  const [isClassChatComposerCollapsed, setIsClassChatComposerCollapsed] = useState(false);
+  const [isStudyComposerCollapsed, setIsStudyComposerCollapsed] = useState(false);
 
   // Selection state
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -101,6 +102,17 @@ export default function App() {
   const filteredClassFiles = classFiles.filter((f) => !f.class_id || f.class_id === selectedClassId);
   const composerVisibleTabs = new Set(["Class Chat", "Study & Quiz"]);
   const shouldShowComposer = composerVisibleTabs.has(activeNav);
+  const isComposerCollapsed = isClassChatTab
+    ? isClassChatComposerCollapsed
+    : isStudyComposerCollapsed;
+
+  function setCurrentComposerCollapsed(next) {
+    if (isClassChatTab) {
+      setIsClassChatComposerCollapsed(next);
+      return;
+    }
+    setIsStudyComposerCollapsed(next);
+  }
 
   useEffect(() => {
     if (isClassChatTab && mode !== "Chat") {
@@ -152,7 +164,11 @@ export default function App() {
   async function handleCreateClass() {
     setErr("");
     try {
-      await api.createClass(form.name);
+      await api.createClass({
+        name: form.name,
+        professor: form.professor,
+        semester_label: form.semester,
+      });
       setShowAdd(false);
       setForm({ name: "", professor: "", semester: "" });
       await refresh();
@@ -341,6 +357,7 @@ export default function App() {
             selectedClassId={selectedClassId}
             classes={classes}
             chatBusy={chatBusy}
+            bottomInset={classChatBottomInset}
           />
         );
       case "Settings":
@@ -354,6 +371,9 @@ export default function App() {
   const mobileContentPadding = shouldShowComposer
     ? `${Math.max(mobileComposerHeight, isComposerCollapsed ? 72 : 84) + 12}px`
     : undefined;
+  const classChatBottomInset = shouldRenderComposer && isClassChatTab
+    ? (isMobileViewport ? mobileComposerHeight + 8 : 176)
+    : 24;
 
 
   return (
@@ -450,8 +470,8 @@ export default function App() {
 
           {/* Scrollable Page Content */}
           <div
-            className={`flex-1 overflow-y-auto scroll-smooth pb-6 ${shouldRenderComposer ? (isClassChatTab ? "md:pb-32" : "md:pb-44") : "md:pb-6"}`}
-            style={isMobileViewport ? { paddingBottom: mobileContentPadding } : undefined}
+            className={`flex-1 ${isClassChatTab ? "overflow-hidden" : "overflow-y-auto scroll-smooth"} pb-6 ${shouldRenderComposer ? (isClassChatTab ? "md:pb-32" : "md:pb-44") : "md:pb-6"}`}
+            style={isMobileViewport && !isClassChatTab ? { paddingBottom: mobileContentPadding } : undefined}
           >
             {renderContent()}
           </div>
@@ -471,7 +491,7 @@ export default function App() {
           {shouldShowComposer && !isClassChatTab && (
             <button
               type="button"
-              onClick={() => setIsComposerCollapsed((v) => !v)}
+              onClick={() => setCurrentComposerCollapsed(!isComposerCollapsed)}
               className={`hidden md:inline-flex absolute ${isClassChatTab ? "bottom-24 md:bottom-20" : "bottom-3 md:bottom-8"} right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50`}
             >
               {isComposerCollapsed ? "Open Prompt Box" : "Collapse Prompt Box"}
@@ -491,7 +511,7 @@ export default function App() {
               {isMobileViewport && (
                 <button
                   type="button"
-                  onClick={() => setIsComposerCollapsed((v) => !v)}
+                  onClick={() => setCurrentComposerCollapsed(!isComposerCollapsed)}
                   aria-expanded={!isComposerCollapsed}
                   className="w-full flex items-center justify-center gap-2 py-1 text-slate-500"
                 >

@@ -32,10 +32,19 @@ export const api = {
     return data.classes || [];
   },
 
-  createClass: (name) => request("/api/classes", {
-    method: "POST",
-    body: JSON.stringify({ name })
-  }),
+  createClass: (payload) => {
+    const body = typeof payload === "string"
+      ? { name: payload }
+      : {
+          name: payload?.name || "",
+          professor: payload?.professor || null,
+          semester_label: payload?.semester_label || null,
+        };
+    return request("/api/classes", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  },
 
   deleteClass: (classId) => request(`/api/classes/${classId}`, {
     method: "DELETE"

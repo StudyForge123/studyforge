@@ -29,6 +29,8 @@ TEXT_DIR = Path("data/uploads/_extracted")
 
 class CreateClassRequest(BaseModel):
     name: str
+    professor: str | None = None
+    semester_label: str | None = None
 
 class CalendarGenerateRequest(BaseModel):
     class_ids: List[str]
@@ -45,7 +47,11 @@ async def api_create_class(body: CreateClassRequest):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Class name required")
-    class_id = await create_class(name)
+    class_id = await create_class(
+        name=name,
+        professor=body.professor,
+        semester_label=body.semester_label,
+    )
     return {"class_id": class_id}
 
 @router.get("/classes")
@@ -138,21 +144,28 @@ async def api_generate_calendar(body: CalendarGenerateRequest):
         if not cls:
             raise HTTPException(status_code=404, detail=f"Class not found: {cid}")
 
-        # Prefer syllabus, but fall back to any uploaded file
-        syllabi = await list_files(cid, file_type="syllabus")
-        if not syllabi:
-            syllabi = await list_files(cid)  # try any file type
-        if not syllabi:
+        # Prefer syllabus files, but process all files when syllabus is not available.
+        course_files = await list_files(cid, file_type="syllabus")
+        if not course_files:
+            course_files = await list_files(cid)
+        if not course_files:
             continue
 
-        s = syllabi[0]  # most recent
-        text = Path(s["extracted_text_path"]).read_text(encoding="utf-8", errors="ignore")
-
-        items.append({
-            "course": cls["name"],
-            "filename": s["filename"],
-            "text": text,
-        })
+        for f in course_files:
+            extracted_path = f.get("extracted_text_path")
+            if not extracted_path:
+                continue
+            path_obj = Path(extracted_path)
+            if not path_obj.exists():
+                continue
+            text = path_obj.read_text(encoding="utf-8", errors="ignore")
+            items.append(
+                {
+                    "course": cls["name"],
+                    "filename": f.get("filename", "document"),
+                    "text": text,
+                }
+            )
 
     if not items:
         raise HTTPException(status_code=400, detail="No files found for the provided classes. Please upload a syllabus or material PDF first.")
