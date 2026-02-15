@@ -71,6 +71,7 @@ export default function Dashboard({
   classes,
   loading,
   err,
+  generatingCalendar,
   onAddClass,
   onGenerateCalendar,
   onUploadSyllabus,
@@ -103,9 +104,13 @@ export default function Dashboard({
           {/* Actions */}
           <button
             onClick={onGenerateCalendar}
-            className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+            disabled={generatingCalendar}
+            className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
-            Generate Calendar
+            {generatingCalendar && (
+              <span className="inline-block w-3.5 h-3.5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            )}
+            {generatingCalendar ? "Generating..." : "Generate Calendar"}
           </button>
           <button
             onClick={onAddClass}

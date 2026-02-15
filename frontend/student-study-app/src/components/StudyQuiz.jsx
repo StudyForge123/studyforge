@@ -8,14 +8,29 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
     const [quizSubmitted, setQuizSubmitted] = useState(false);
 
     const selectedClass = classes.find(c => c.id === selectedClassId);
+    const slides = (studySession?.slides || []).filter((s) =>
+        Boolean((s?.title || "").trim()) ||
+        (Array.isArray(s?.bullets) && s.bullets.some((b) => String(b || "").trim() !== "")) ||
+        Boolean((s?.speaker_notes || "").trim())
+    );
 
     // Sync activeTab when new data arrives
     useEffect(() => {
-        if (studySession && studySession.slides && studySession.slides.length > 0) {
+        if (slides.length > 0) {
             setActiveTab('study');
             setCurrentSlide(0);
         }
-    }, [studySession]);
+    }, [studySession, slides.length]);
+
+    useEffect(() => {
+        if (slides.length === 0) {
+            setCurrentSlide(0);
+            return;
+        }
+        if (currentSlide > slides.length - 1) {
+            setCurrentSlide(slides.length - 1);
+        }
+    }, [slides.length, currentSlide]);
 
     useEffect(() => {
         if (quiz && quiz.questions && quiz.questions.length > 0) {
@@ -105,7 +120,7 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
             {/* STUDY TAB */}
             {selectedClassId && activeTab === 'study' && (
                 <div className="space-y-6">
-                    {!studySession || !studySession.slides || studySession.slides.length === 0 ? (
+                    {!studySession || slides.length === 0 ? (
                         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
                             <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <span className="text-2xl">📖</span>
@@ -121,17 +136,17 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
                                 <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm aspect-video flex flex-col">
                                     <div className="bg-slate-900 p-8 flex-1 flex flex-col justify-center items-center text-center">
                                         <h2 className="text-4xl font-bold text-white mb-6 leading-tight">
-                                            {studySession.slides[currentSlide]?.title}
+                                            {slides[currentSlide]?.title}
                                         </h2>
                                         <ul className="text-xl text-slate-300 space-y-4 max-w-2xl text-left list-disc list-inside">
-                                            {(studySession.slides[currentSlide]?.bullets || []).map((b, i) => (
+                                            {(slides[currentSlide]?.bullets || []).map((b, i) => (
                                                 <li key={i}>{b}</li>
                                             ))}
                                         </ul>
                                     </div>
                                     <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-white">
                                         <span className="text-sm font-medium text-slate-500">
-                                            Slide {currentSlide + 1} of {studySession.slides.length}
+                                            Slide {Math.min(currentSlide + 1, Math.max(slides.length, 1))} of {slides.length}
                                         </span>
                                         <div className="flex gap-2">
                                             <button
@@ -139,10 +154,10 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
                                                 onClick={() => setCurrentSlide(c => c - 1)}
                                                 className="px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-30 rounded-lg border border-slate-200"
                                             >
-                                                Previous
+                                                Previous Slide
                                             </button>
                                             <button
-                                                disabled={currentSlide === studySession.slides.length - 1}
+                                                disabled={currentSlide === slides.length - 1}
                                                 onClick={() => setCurrentSlide(c => c + 1)}
                                                 className="px-4 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-30 rounded-lg shadow-md"
                                             >
@@ -156,7 +171,7 @@ export default function StudyQuiz({ quiz, studySession, selectedClassId, classes
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Speaker Notes</h4>
                                     <p className="text-slate-700 leading-relaxed font-serif text-lg italic">
-                                        "{studySession.slides[currentSlide]?.speaker_notes}"
+                                        "{slides[currentSlide]?.speaker_notes}"
                                     </p>
                                 </div>
                             </div>

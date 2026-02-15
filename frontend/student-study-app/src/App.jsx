@@ -27,6 +27,8 @@ export default function App() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [generatingCalendar, setGeneratingCalendar] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // Agent Results
   const [quiz, setQuiz] = useState(null);
@@ -40,6 +42,7 @@ export default function App() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
+  const promptRef = useRef(null);
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
@@ -89,6 +92,21 @@ export default function App() {
     })();
   }, [selectedClassId]);
 
+  const isClassChatTab = activeNav === "Class Chat";
+  const filteredClassFiles = classFiles.filter((f) => !f.class_id || f.class_id === selectedClassId);
+
+  useEffect(() => {
+    if (isClassChatTab && mode !== "Chat") {
+      setMode("Chat");
+    }
+  }, [isClassChatTab, mode]);
+
+  useEffect(() => {
+    if (isClassChatTab && !isComposerCollapsed && promptRef.current) {
+      setTimeout(() => promptRef.current?.focus(), 0);
+    }
+  }, [isClassChatTab, isComposerCollapsed]);
+
   async function handleCreateClass() {
     setErr("");
     try {
@@ -103,13 +121,19 @@ export default function App() {
 
   async function handleGenerateCalendar() {
     setErr("");
+    setGeneratingCalendar(true);
     try {
       const classIds = classes.map(c => c.id);
       await api.generateCalendar(classIds);
       await refresh();
       setActiveNav("Calendar");
+      setToast({ type: "success", message: "Calendar generated successfully." });
     } catch (e) {
       setErr(e.message || "Generate failed");
+      setToast({ type: "error", message: e.message || "Calendar generation failed." });
+    } finally {
+      setGeneratingCalendar(false);
+      setTimeout(() => setToast(null), 3200);
     }
   }
 
@@ -246,6 +270,7 @@ export default function App() {
             classes={classes}
             loading={loading}
             err={err}
+            generatingCalendar={generatingCalendar}
             onAddClass={() => setShowAdd(true)}
             onGenerateCalendar={handleGenerateCalendar}
             onUploadSyllabus={(classId) => handleUploadClick(classId, "syllabus")}
@@ -381,15 +406,27 @@ export default function App() {
           </div>
 
           {/* Scrollable Page Content */}
-          <div className={`flex-1 overflow-y-auto scroll-smooth ${shouldRenderComposer ? "pb-72 md:pb-44" : "pb-6"}`}>
+          <div className={`flex-1 overflow-y-auto scroll-smooth ${shouldRenderComposer ? (isClassChatTab ? "pb-36 md:pb-32" : "pb-72 md:pb-44") : "pb-6"}`}>
             {renderContent()}
           </div>
 
-          {shouldShowComposer && (
+          {toast && (
+            <div className="absolute top-16 right-4 z-40 animate-pulse">
+              <div className={`px-4 py-3 rounded-xl shadow-xl border backdrop-blur text-sm font-semibold ${
+                toast.type === "success"
+                  ? "bg-emerald-50/95 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50/95 text-rose-800 border-rose-200"
+              }`}>
+                {toast.message}
+              </div>
+            </div>
+          )}
+
+          {shouldShowComposer && !isClassChatTab && (
             <button
               type="button"
               onClick={() => setIsComposerCollapsed((v) => !v)}
-              className="absolute bottom-3 md:bottom-8 right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50"
+              className={`absolute ${isClassChatTab ? "bottom-24 md:bottom-20" : "bottom-3 md:bottom-8"} right-3 md:right-8 z-30 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md hover:bg-slate-50`}
             >
               {isComposerCollapsed ? "Open Prompt Box" : "Collapse Prompt Box"}
             </button>
@@ -397,8 +434,8 @@ export default function App() {
 
           {/* Bottom Prompt Bar (Floating) */}
           {shouldRenderComposer && (
-            <div className="absolute bottom-16 md:bottom-20 left-3 md:left-8 right-3 md:right-8 z-20 flex justify-center pointer-events-none">
-              <div className="w-full max-w-5xl bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-3 space-y-2 pointer-events-auto ring-1 ring-slate-900/5">
+            <div className={`absolute ${isClassChatTab ? "bottom-0 md:bottom-0 left-0 right-0" : "bottom-16 md:bottom-20 left-3 md:left-8 right-3 md:right-8"} z-20 flex justify-center pointer-events-none`}>
+              <div className={`w-full ${isClassChatTab ? "max-w-none md:max-w-6xl rounded-none md:rounded-2xl border-x-0 md:border" : "max-w-5xl rounded-2xl border"} bg-white/90 backdrop-blur-xl shadow-2xl shadow-slate-200/50 border-white/20 p-3 space-y-2 pointer-events-auto ring-1 ring-slate-900/5`}>
               <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedClassId}
@@ -432,25 +469,32 @@ export default function App() {
                 style={{ backgroundImage: 'none' }}
               >
                 <option value="">All Class Files</option>
-                {classFiles.map((f) => (
+                {filteredClassFiles.map((f) => (
                   <option key={f.id} value={f.id}>{f.file_type === "syllabus" ? "[Syllabus] " : ""}{f.filename}</option>
                 ))}
               </select>
 
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-                className="w-full sm:w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
-                style={{ backgroundImage: 'none' }}
-              >
-                <option>Chat</option>
-                <option>Study Session</option>
-                <option>Practice Quiz</option>
-              </select>
+              {isClassChatTab ? (
+                <div className="w-full sm:w-48 bg-slate-50 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200">
+                  Chat
+                </div>
+              ) : (
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="w-full sm:w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                  style={{ backgroundImage: 'none' }}
+                >
+                  <option>Chat</option>
+                  <option>Study Session</option>
+                  <option>Practice Quiz</option>
+                </select>
+              )}
               </div>
 
               <div className="flex flex-col md:flex-row items-stretch gap-2">
                 <textarea
+                  ref={promptRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -459,7 +503,7 @@ export default function App() {
                       handleSend();
                     }
                   }}
-                  rows={3}
+                  rows={isClassChatTab ? 2 : 3}
                   className="w-full md:flex-1 resize-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 text-slate-800"
                   placeholder={`${mode === "Chat" ? "Ask your AI assistant..." : `Enter topic for ${mode}...`} (Ctrl/Cmd+Enter to send)`}
                 />

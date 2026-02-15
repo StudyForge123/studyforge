@@ -69,12 +69,12 @@ def _infer_event_type(title: str) -> str:
         return "exam"
     if "quiz" in t:
         return "quiz"
-    if any(k in t for k in ["homework", "assignment", "due", "deadline", "reading"]):
+    if "reading" in t:
+        return "reading"
+    if any(k in t for k in ["homework", "assignment", "due", "deadline"]):
         return "assignment"
     if "project" in t:
         return "project"
-    if "reading" in t:
-        return "reading"
     return "other"
 
 def _to_hhmm(hour: int, minute: int, suffix: str | None) -> str:
@@ -146,8 +146,6 @@ def _extract_table_events(items: List[Dict[str, Any]], default_year: int) -> Lis
                 weeks.append(datetime(default_year, month, day))
             except ValueError:
                 continue
-        if not weeks:
-            continue
         weeks = sorted({w.date(): w for w in weeks}.values(), key=lambda d: d.date())
 
         lower = text.lower()
