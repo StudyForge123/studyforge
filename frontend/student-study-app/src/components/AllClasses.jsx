@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import ClassDetail from "./ClassDetail";
 
 export default function AllClasses() {
     const [classes, setClasses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState("");
+    const [selectedClass, setSelectedClass] = useState(null);
 
     useEffect(() => {
         async function load() {
             try {
-                const data = await api.getClasses();
+                const data = await api.listClasses();
                 setClasses(data);
             } catch (e) {
                 setErr(e.message || "Failed to load classes");
@@ -19,6 +21,10 @@ export default function AllClasses() {
         }
         load();
     }, []);
+
+    if (selectedClass) {
+        return <ClassDetail classData={selectedClass} onBack={() => setSelectedClass(null)} />;
+    }
 
     return (
         <div className="px-8 py-10 max-w-6xl mx-auto h-full overflow-y-auto">
@@ -40,7 +46,11 @@ export default function AllClasses() {
             ) : (
                 <div className="grid grid-cols-1 gap-4">
                     {classes.map((c) => (
-                        <div key={c.id || c.name} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-6 group">
+                        <button
+                            key={c.id || c.name}
+                            onClick={() => setSelectedClass(c)}
+                            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-6 group w-full text-left"
+                        >
                             <div className="flex items-start gap-5">
                                 <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-2xl flex-shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm group-hover:shadow-indigo-500/20">
                                     📖
@@ -48,27 +58,25 @@ export default function AllClasses() {
                                 <div>
                                     <h2 className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</h2>
                                     <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-slate-500 text-sm font-medium">{c.professor}</p>
-                                        <span className="w-1 h-1 rounded-full bg-slate-300" />
-                                        <p className="text-slate-400 text-sm">{c.semester || "Current"}</p>
+                                        <p className="text-slate-500 text-sm font-medium">{c.professor || "No Professor"}</p>
+                                        {c.semester && (
+                                            <>
+                                                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                                <p className="text-slate-400 text-sm">{c.semester}</p>
+                                            </>
+                                        )}
                                     </div>
-                                    <div className="mt-3 text-xs bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-100 inline-flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                        Next Exam: {c.nextExamDate || "TBA"}
+                                    <div className="mt-3 text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg border border-indigo-100 inline-flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                                        Click to manage files
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="md:w-72 w-full bg-slate-50/50 p-5 rounded-2xl border border-slate-100/50">
-                                <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-wide">
-                                    <span className="text-slate-400">Course Progress</span>
-                                    <span className="text-indigo-600">{Math.round((c.progress || 0) * 100)}%</span>
-                                </div>
-                                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.4)]" style={{ width: `${(c.progress || 0) * 100}%` }} />
-                                </div>
+                            <div className="text-xs text-slate-400 md:text-right">
+                                Added {new Date(c.created_at).toLocaleDateString()}
                             </div>
-                        </div>
+                        </button>
                     ))}
 
                     {classes.length === 0 && !err && (
