@@ -1,0 +1,38 @@
+# Virtual environments
+.venv
+venv
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Local environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Git
+.git
+.gitignore
+
+# Local runtime data (mount via volume instead)
+data/uploads
+data/uploads/_extracted
+data/index
+data/db
+*.db
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+*.swo
+
+# Tests / scripts (not needed in container)
+scripts
+tests
+README.md

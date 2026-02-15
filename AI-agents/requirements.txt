@@ -9,6 +9,10 @@ click==8.3.1
 colorama==0.4.6
 cryptography==46.0.5
 distro==1.9.0
+<<<<<<< HEAD
+=======
+dnspython==2.8.0
+>>>>>>> sulaiman
 faiss-cpu==1.13.2
 fastapi==0.129.0
 griffe==1.15.0
@@ -21,6 +25,10 @@ jiter==0.13.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 mcp==1.26.0
+<<<<<<< HEAD
+=======
+motor==3.7.1
+>>>>>>> sulaiman
 numpy==2.4.2
 openai==2.21.0
 openai-agents==0.9.0
@@ -30,6 +38,10 @@ pydantic==2.12.5
 pydantic-settings==2.12.0
 pydantic_core==2.41.5
 PyJWT==2.11.0
+<<<<<<< HEAD
+=======
+pymongo==4.16.0
+>>>>>>> sulaiman
 pypdf==6.7.0
 python-dotenv==1.2.1
 python-multipart==0.0.22

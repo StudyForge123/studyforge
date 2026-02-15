@@ -8,3 +8,9 @@
 ## Running pdf_text.py
 - run `python -c "from app.ingest.pdf_text import extract_pdf_text_with_markers; print(extract_pdf_text_with_markers('data/uploads/test.pdf')[:1200])"`
 
+<<<<<<< HEAD
+=======
+
+## commands:
+- curl -s -X POST http://localhost:8001/api/classes   -H "Content-Type: application/json"   -d '{"name":"MATH 105"}'
+>>>>>>> sulaiman

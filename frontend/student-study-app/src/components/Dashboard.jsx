@@ -12,14 +12,11 @@ function StatCard({ label, value, color }) {
   );
 }
 
-function ClassCard({ c, onOpen }) {
+function ClassCard({ c, onOpen, onUploadSyllabus }) {
   const progress = c.progress ?? 0;
 
   return (
-    <button
-      onClick={() => onOpen?.(c)}
-      className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 group w-full"
-    >
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 group w-full relative">
       <div className="flex justify-between items-start mb-4">
         <div>
           <div className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</div>
@@ -44,12 +41,24 @@ function ClassCard({ c, onOpen }) {
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-50 flex items-center gap-2 text-xs text-slate-500">
-          <span className="font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">Next Exam</span>
-          <span>{c.nextExamDate || "Not scheduled"}</span>
+        <div className="pt-4 border-t border-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="font-medium bg-red-50 text-red-600 px-2 py-1 rounded-md">Next Exam</span>
+            <span>{c.nextExamDate || "Not scheduled"}</span>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUploadSyllabus?.(c.id);
+            }}
+            className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline"
+          >
+            Upload Syllabus
+          </button>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -60,7 +69,9 @@ export default function Dashboard({
   err,
   onAddClass,
   onGenerateCalendar,
+  onUploadSyllabus,
 }) {
+
   const stats = useMemo(() => {
     return [
       { label: "Active Classes", value: dashboard?.activeClasses, color: "text-indigo-600" },
@@ -122,7 +133,12 @@ export default function Dashboard({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {classes.map((c) => (
-              <ClassCard key={c.id || c.name} c={c} onOpen={() => { }} />
+              <ClassCard
+                key={c.id || c.name}
+                c={c}
+                onOpen={() => { }}
+                onUploadSyllabus={onUploadSyllabus}
+              />
             ))}
 
             {/* Empty State / Add New Placeholder */}
