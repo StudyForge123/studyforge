@@ -55,6 +55,23 @@ async def get_class(class_id: str) -> Optional[Dict[str, Any]]:
     d["id"] = str(d.pop("_id"))
     return d
 
+async def delete_class_data(class_id: str) -> Dict[str, Any]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(class_id)
+    except Exception:
+        return {"class_deleted": False, "files_deleted": 0, "chat_deleted": 0}
+
+    class_res = await db.classes.delete_one({"_id": oid})
+    files_res = await db.files.delete_many({"class_id": class_id})
+    chat_res = await db.chat_history.delete_many({"class_id": class_id})
+    return {
+        "class_deleted": class_res.deleted_count > 0,
+        "files_deleted": files_res.deleted_count,
+        "chat_deleted": chat_res.deleted_count,
+    }
+
 # ---- Files ----
 
 async def insert_file(
@@ -88,6 +105,20 @@ async def list_files(class_id: str, file_type: Optional[str] = None) -> List[Dic
         d["id"] = str(d.pop("_id"))
         out.append(d)
     return out
+
+async def delete_file(file_id: str, class_id: str) -> Optional[Dict[str, Any]]:
+    from bson import ObjectId
+    db = get_db()
+    try:
+        oid = ObjectId(file_id)
+    except Exception:
+        return None
+
+    deleted = await db.files.find_one_and_delete({"_id": oid, "class_id": class_id})
+    if not deleted:
+        return None
+    deleted["id"] = str(deleted.pop("_id"))
+    return deleted
 
 # ---- Chat History ----
 
