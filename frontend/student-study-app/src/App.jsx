@@ -5,9 +5,12 @@ import { api } from "./api/client";
 import Dashboard from "./components/Dashboard";
 import Calendar from "./components/Calendar";
 import AllClasses from "./components/AllClasses";
+import Quiz from "./components/Quiz";
+import StudySession from "./components/StudySession";
+import ChatHistory from "./components/ChatHistory";
 import Settings from "./components/Settings";
 
-const navItems = ["Dashboard", "Calendar", "All Classes", "Settings"];
+const navItems = ["Dashboard", "Calendar", "All Classes", "Quiz", "Study Session", "Chat", "Settings"];
 
 export default function App() {
   const [activeNav, setActiveNav] = useState("Dashboard");
@@ -19,13 +22,14 @@ export default function App() {
   const [err, setErr] = useState("");
 
   // Bottom chat State
-  const [mode, setMode] = useState("Study Session");
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
 
   // Modal: Add Class State
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", professor: "", semester: "" });
+  // Selected class for chat (and context)
+  const [selectedClassId, setSelectedClassId] = useState("");
 
   async function refresh() {
     setLoading(true);
@@ -48,7 +52,7 @@ export default function App() {
   async function handleCreateClass() {
     setErr("");
     try {
-      await api.createClass(form);
+      await api.createClass({ name: form.name });
       setShowAdd(false);
       setForm({ name: "", professor: "", semester: "" });
       await refresh();
@@ -60,7 +64,12 @@ export default function App() {
   async function handleGenerateCalendar() {
     setErr("");
     try {
-      await api.generateCalendar();
+      const ids = classes.map((c) => c.id).filter(Boolean);
+      if (ids.length === 0) {
+        setErr("Add at least one class first");
+        return;
+      }
+      await api.generateCalendar(ids);
       await refresh();
       setActiveNav("Calendar");
     } catch (e) {
@@ -71,10 +80,14 @@ export default function App() {
   async function handleSend() {
     const text = message.trim();
     if (!text) return;
+    if (!selectedClassId) {
+      setErr("Select a class (e.g. from All Classes) to use chat.");
+      return;
+    }
     setChatBusy(true);
     setErr("");
     try {
-      await api.chat({ mode, message: text });
+      await api.sendChat(selectedClassId, text);
       setMessage("");
     } catch (e) {
       setErr(e.message || "Chat failed");
@@ -98,9 +111,15 @@ export default function App() {
           />
         );
       case "Calendar":
-        return <Calendar />;
+        return <Calendar classes={classes} />;
       case "All Classes":
-        return <AllClasses />;
+        return <AllClasses onSelectClass={setSelectedClassId} selectedClassId={selectedClassId} />;
+      case "Quiz":
+        return <Quiz classes={classes} />;
+      case "Study Session":
+        return <StudySession classes={classes} />;
+      case "Chat":
+        return <ChatHistory classId={selectedClassId} classes={classes} />;
       case "Settings":
         return <Settings />;
       default:
@@ -176,14 +195,15 @@ export default function App() {
           <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-center pointer-events-none">
             <div className="w-full max-w-3xl bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/20 p-2 flex items-center gap-2 pointer-events-auto ring-1 ring-slate-900/5">
               <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
                 className="w-48 bg-slate-50 border-transparent rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-100 focus:outline-none cursor-pointer hover:bg-slate-100 transition-colors"
                 style={{ backgroundImage: 'none' }}
               >
-                <option>Study Session</option>
-                <option>Practice Quiz</option>
-                <option>Practice Exam</option>
+                <option value="">Select class for chat</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
 
               <div className="h-6 w-px bg-slate-100 mx-1" />

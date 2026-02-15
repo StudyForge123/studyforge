@@ -87,7 +87,7 @@ export default function Dashboard({
             onClick={onGenerateCalendar}
             className="bg-white border border-slate-200 text-slate-700 px-5 py-2.5 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
           >
-            Refesh Calendar
+            Refresh Calendar
           </button>
           <button
             onClick={onAddClass}
